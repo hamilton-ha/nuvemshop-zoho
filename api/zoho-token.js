@@ -1,21 +1,14 @@
 export default async function handler(req, res) {
-  const { code } = req.query;
-
-  if (!code) {
-    return res.status(200).send("Aguardando code do Zoho...");
-  }
-
   const response = await fetch("https://accounts.zoho.com/oauth/v2/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body: new URLSearchParams({
-      grant_type: "authorization_code",
-      client_id: "1000.GIMYXWBM45YXE5EI4Q6JILEK5CH86R",
-      client_secret: "f28096d07558b6c277a0d5551260c1be5e8f006a5c",
-      redirect_uri: "https://project-2jpn7.vercel.app/api/zoho-token",
-      code: code
+      grant_type: "refresh_token",
+      client_id: process.env.ZOHO_CLIENT_ID,
+      client_secret: process.env.ZOHO_CLIENT_SECRET,
+      refresh_token: process.env.ZOHO_REFRESH_TOKEN
     })
   });
 
