@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/enviar-zoho?page=1&limit=50",
+      "schedule": "0 8 * * *"
+    }
+  ]
+}
