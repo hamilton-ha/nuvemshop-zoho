@@ -26,11 +26,23 @@ export default async function handler(req, res) {
     Number(c.total_spent || 0) === 0 && !c.last_order_id
   );
 
-  // CARRINHOS ABANDONADOS
+ // CARRINHOS ABANDONADOS
 const carrinhosResp = await fetch(
-  `https://api.nuvemshop.com.br/v1/${storeId}/abandoned-checkouts?page=1&per_page=200`,
+  `https://api.nuvemshop.com.br/v1/${storeId}/checkouts?page=1&per_page=200`,
   { headers }
 );
+
+const carrinhosData = await carrinhosResp.json();
+
+const carrinhos = Array.isArray(carrinhosData) ? carrinhosData : [];
+
+const carrinhoAbandonado = carrinhos
+  .filter(c => c.contact_email && c.contact_accepts_marketing === true)
+  .map(c => ({
+    email: c.contact_email,
+    name: c.contact_name,
+    checkout_url: c.abandoned_checkout_url
+  }));
 
 const carrinhosData = await carrinhosResp.json();
 
