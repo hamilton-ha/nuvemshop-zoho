@@ -15,12 +15,13 @@ export default async function handler(req, res) {
 
   const data = await response.json();
 
-  const clientes = data.map(cliente => ({
-    nome: cliente.name,
-    email: cliente.email,
-    telefone: cliente.phone,
-    aceita_marketing: cliente.accepts_marketing
-  }));
+  const clientes = data
+    .filter(cliente => cliente.accepts_marketing === true)
+    .map(cliente => ({
+      name: cliente.name,
+      email: cliente.email,
+      phone: cliente.phone
+    }));
 
   return res.status(200).json(clientes);
 }
