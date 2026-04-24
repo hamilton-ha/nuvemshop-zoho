@@ -3,7 +3,7 @@ export default async function handler(req, res) {
   const nuvemToken = "a687e51c0c454e0f89fe239db9c808d31d2bf15a";
 
   const response = await fetch(
-    `https://api.nuvemshop.com.br/v1/${storeId}/checkouts?page=1&per_page=10`
+    `https://api.nuvemshop.com.br/v1/${storeId}/checkouts?page=1&per_page=10`,
     {
       headers: {
         "Authentication": `bearer ${nuvemToken}`,
