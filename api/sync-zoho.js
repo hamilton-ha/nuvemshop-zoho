@@ -26,21 +26,20 @@ export default async function handler(req, res) {
     Number(c.total_spent || 0) === 0 && !c.last_order_id
   );
 
-  // PEDIDOS (para detectar abandono)
-  const pedidosResp = await fetch(
-    `https://api.nuvemshop.com.br/v1/${storeId}/orders?page=1&per_page=200`,
-    { headers }
-  );
+  // CARRINHOS ABANDONADOS
+const carrinhosResp = await fetch(
+  `https://api.nuvemshop.com.br/v1/${storeId}/abandoned-checkouts?page=1&per_page=200`,
+  { headers }
+);
 
-  const pedidos = await pedidosResp.json();
+const carrinhos = await carrinhosResp.json();
 
-  const carrinhoAbandonado = pedidos
-    .filter(p => p.payment_status === "pending")
-    .map(p => ({
-      email: p.contact_email,
-      name: p.contact_name
-    }))
-    .filter(p => p.email);
+const carrinhoAbandonado = carrinhos
+  .map(c => ({
+    email: c.contact_email,
+    name: c.contact_name
+  }))
+  .filter(c => c.email);
 
   // TOKEN ZOHO
   const zohoTokenResponse = await fetch(
