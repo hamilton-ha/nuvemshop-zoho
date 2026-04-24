@@ -1,11 +1,15 @@
 export default function handler(req, res) {
-  const { code } = req.query;
+  const { code, store_id } = req.query;
 
-  console.log('Código recebido da Nuvemshop:', code);
+  console.log('Query recebida:', req.query);
 
   if (!code) {
-    return res.status(400).send('Nenhum código recebido da Nuvemshop.');
+    return res.status(200).send('Instalação iniciada, aguardando código...');
   }
 
-  return res.status(200).send('Código recebido com sucesso. Próximo passo: trocar por token.');
+  return res.status(200).send(`
+    <h1>Integração funcionando 🚀</h1>
+    <p>Code: ${code}</p>
+    <p>Store ID: ${store_id}</p>
+  `);
 }
