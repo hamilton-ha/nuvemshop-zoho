@@ -3,9 +3,9 @@ export default async function handler(req, res) {
 
   const response = await fetch("https://api.nuvemshop.com.br/v1/orders", {
     headers: {
-      Authentication: `bearer ${token}`,
-      "Content-Type": "application/json",
-      "User-Agent": "Elo Forte App (contato@elofortedigital.com.br)"
+      "Authentication": `bearer ${token}`,
+      "User-Agent": "Elo Forte App (contato@elofortedigital.com.br)",
+      "Content-Type": "application/json"
     }
   });
 
