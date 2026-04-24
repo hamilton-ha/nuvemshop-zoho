@@ -2,7 +2,6 @@ export default async function handler(req, res) {
   const storeId = "4882514";
   const nuvemToken = "a687e51c0c454e0f89fe239db9c808d31d2bf15a";
 
-  // Buscar clientes
   const response = await fetch(
     `https://api.nuvemshop.com.br/v1/${storeId}/customers?page=1&per_page=200`,
     {
@@ -18,7 +17,6 @@ export default async function handler(req, res) {
 
   const clientes = data.filter(c => c.accepts_marketing === true && c.email);
 
-  // Token Zoho
   const zohoTokenResponse = await fetch(
     "https://project-2jpn7.vercel.app/api/zoho-token"
   );
@@ -39,7 +37,7 @@ export default async function handler(req, res) {
 
     try {
       const zohoResponse = await fetch(
-        "https://campaigns.zoho.com/api/v1.1/json/addcontacts",
+        "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
         {
           method: "POST",
           headers: {
@@ -50,12 +48,10 @@ export default async function handler(req, res) {
             resfmt: "JSON",
             listkey: listKey,
             source: "API",
-            data: JSON.stringify([
-              {
-                Email: cliente.email,
-                FirstName: cliente.name || ""
-              }
-            ])
+            contactinfo: JSON.stringify({
+              "Contact Email": cliente.email,
+              "First Name": cliente.name || ""
+            })
           })
         }
       );
@@ -63,11 +59,8 @@ export default async function handler(req, res) {
       const resultado = await zohoResponse.json();
 
       if (resultado.status === "success") {
-        if (comprou) {
-          enviadosCompraram++;
-        } else {
-          enviadosNaoCompraram++;
-        }
+        if (comprou) enviadosCompraram++;
+        else enviadosNaoCompraram++;
       } else {
         erros.push({ cliente: cliente.email, resultado });
       }
