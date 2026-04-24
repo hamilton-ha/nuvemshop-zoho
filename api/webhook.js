@@ -8,7 +8,7 @@ export default async function handler(req, res) {
 
   while (hasMore) {
     const response = await fetch(
-      `https://api.nuvemshop.com.br/v1/${storeId}/customers?page=${page}&per_page=200`,
+      `https://api.nuvemshop.com.br/v1/${storeId}/customers?page=1&per_page=200`,
       {
         headers: {
           "Authentication": `bearer ${token}`,
