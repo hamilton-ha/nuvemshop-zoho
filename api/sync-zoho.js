@@ -75,9 +75,10 @@ export default async function handler(req, res) {
   }
 
   return res.status(200).json({
-    total_processados: clientes.length,
-    enviados_compraram: enviadosCompraram,
-    enviados_nao_compraram: enviadosNaoCompraram,
-    erros
-  });
-}
+  total_processados: clientes.length,
+  enviados_compraram: enviadosCompraram,
+  enviados_nao_compraram: enviadosNaoCompraram,
+  list_compraram: process.env.ZOHO_LIST_COMPRARAM ? "configurada" : "faltando",
+  list_nao_compraram: process.env.ZOHO_LIST_NAO_COMPRARAM ? "configurada" : "faltando",
+  erros
+});
