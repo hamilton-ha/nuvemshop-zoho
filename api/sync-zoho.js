@@ -32,15 +32,18 @@ const carrinhosResp = await fetch(
   { headers }
 );
 
-const carrinhos = await carrinhosResp.json();
+const carrinhosData = await carrinhosResp.json();
+
+// PROTEÇÃO CONTRA ERRO
+const carrinhos = Array.isArray(carrinhosData) ? carrinhosData : [];
 
 const carrinhoAbandonado = carrinhos
   .map(c => ({
-    email: c.contact_email,
-    name: c.contact_name
+    email: c.contact_email || c.email,
+    name: c.contact_name || c.name
   }))
   .filter(c => c.email);
-
+  
   // TOKEN ZOHO
   const zohoTokenResponse = await fetch(
     "https://project-2jpn7.vercel.app/api/zoho-token"
