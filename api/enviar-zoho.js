@@ -30,31 +30,46 @@ export default async function handler(req, res) {
   const zohoTokenData = await zohoTokenResponse.json();
   const accessToken = zohoTokenData.access_token;
 
-  const primeiroCliente = clientes[0];
+  let enviados = 0;
+  let erros = [];
 
-  const zohoResponse = await fetch(
-    "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
-    {
-      method: "POST",
-      headers: {
-        "Authorization": `Zoho-oauthtoken ${accessToken}`,
-        "Content-Type": "application/x-www-form-urlencoded"
-      },
-      body: new URLSearchParams({
-        resfmt: "JSON",
-        listkey: process.env.ZOHO_LIST_KEY,
-        contactinfo: JSON.stringify({
-          "Contact Email": primeiroCliente.email,
-          "First Name": primeiroCliente.name || ""
-        })
-      })
+  for (const cliente of clientes.slice(0, 20)) {
+    try {
+      const zohoResponse = await fetch(
+        "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Zoho-oauthtoken ${accessToken}`,
+            "Content-Type": "application/x-www-form-urlencoded"
+          },
+          body: new URLSearchParams({
+            resfmt: "JSON",
+            listkey: process.env.ZOHO_LIST_KEY,
+            contactinfo: JSON.stringify({
+              "Contact Email": cliente.email,
+              "First Name": cliente.name || ""
+            })
+          })
+        }
+      );
+
+      const resultado = await zohoResponse.json();
+
+      if (resultado.status === "success") {
+        enviados++;
+      } else {
+        erros.push({ cliente, resultado });
+      }
+    } catch (e) {
+      erros.push({ cliente, erro: e.message });
     }
-  );
-
-  const resultado = await zohoResponse.json();
+  }
 
   return res.status(200).json({
-    cliente_teste: primeiroCliente,
-    zoho: resultado
+    total_clientes_que_aceitam_marketing: clientes.length,
+    enviados_neste_teste: enviados,
+    limite_teste: 20,
+    erros
   });
 }
