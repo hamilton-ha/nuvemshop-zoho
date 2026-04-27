@@ -9,42 +9,30 @@ export default async function handler(req, res) {
       "Content-Type": "application/json"
     };
 
-    // CLIENTES
-    const clientesResp = await fetch(
-      `https://api.nuvemshop.com.br/v1/${storeId}/customers?page=1&per_page=200`,
-      { headers }
-    );
-
-    const clientesData = await clientesResp.json();
-
-    const clientes = Array.isArray(clientesData)
-      ? clientesData.filter(c => c.accepts_marketing === true && c.email)
-      : [];
-
-    const compraram = clientes.filter(c =>
-      Number(c.total_spent || 0) > 0 || c.last_order_id
-    );
-
-    const naoCompraram = clientes.filter(c =>
-      Number(c.total_spent || 0) === 0 && !c.last_order_id
-    );
-
-    // CARRINHOS ABANDONADOS
+    // BUSCAR CARRINHOS
     const carrinhosResp = await fetch(
-      `https://api.nuvemshop.com.br/v1/${storeId}/checkouts?page=1&per_page=200`,
+      `https://api.nuvemshop.com.br/v1/${storeId}/checkouts?page=1&per_page=50`,
       { headers }
     );
 
     const carrinhosData = await carrinhosResp.json();
     const carrinhos = Array.isArray(carrinhosData) ? carrinhosData : [];
 
+    // ORDENAR DO MAIS RECENTE PARA O MAIS ANTIGO
+    carrinhos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    // FILTRAR APENAS ABANDONADOS
     const carrinhoAbandonado = carrinhos
       .filter(c => c.contact_email && c.contact_accepts_marketing === true)
       .map(c => ({
         email: c.contact_email,
         name: c.contact_name || "",
-        checkout_url: c.abandoned_checkout_url || ""
+        checkout_url: c.abandoned_checkout_url || "",
+        created_at: c.created_at
       }));
+
+    // PEGAR OS 5 MAIS RECENTES PRA DEBUG
+    const exemplos = carrinhoAbandonado.slice(0, 5);
 
     // TOKEN ZOHO
     const zohoTokenResponse = await fetch(
@@ -54,50 +42,6 @@ export default async function handler(req, res) {
     const zohoTokenData = await zohoTokenResponse.json();
     const accessToken = zohoTokenData.access_token;
 
-    if (!accessToken) {
-      return res.status(500).json({
-        erro: "Não foi possível gerar access_token do Zoho",
-        detalhe: zohoTokenData
-      });
-    }
-
-    // ADICIONA CONTATOS EM LOTE - LISTAS SIMPLES
-    async function adicionarEmLotes(lista, listKey) {
-      let enviados = 0;
-      let erros = [];
-
-      for (let i = 0; i < lista.length; i += 10) {
-        const lote = lista.slice(i, i + 10).map(c => c.email).join(",");
-
-        const zohoResponse = await fetch(
-          "https://campaigns.zoho.com/api/v1.1/addlistsubscribersinbulk",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Zoho-oauthtoken ${accessToken}`,
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: new URLSearchParams({
-              resfmt: "JSON",
-              listkey: listKey,
-              emailids: lote
-            })
-          }
-        );
-
-        const resultado = await zohoResponse.json();
-
-        if (resultado.status === "success") {
-          enviados += lista.slice(i, i + 10).length;
-        } else {
-          erros.push({ lote, resultado });
-        }
-      }
-
-      return { enviados, erros };
-    }
-
-    // ADICIONA CARRINHO ABANDONADO COM LINK PERSONALIZADO
     async function adicionarCarrinhoComLink(lista, listKey) {
       let enviados = 0;
       let erros = [];
@@ -128,90 +72,26 @@ export default async function handler(req, res) {
         if (resultado.status === "success") {
           enviados++;
         } else {
-          erros.push({
-            email: cliente.email,
-            link_carrinho: cliente.checkout_url,
-            resultado
-          });
+          erros.push({ email: cliente.email, resultado });
         }
       }
 
       return { enviados, erros };
     }
 
-    // REMOVE QUEM COMPROU DA LISTA DE NÃO COMPRARAM
-    async function removerDaLista(lista, listKey) {
-      let removidos = 0;
-      let erros = [];
-
-      for (const cliente of lista) {
-        const zohoResponse = await fetch(
-          "https://campaigns.zoho.com/api/v1.1/json/listunsubscribe",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Zoho-oauthtoken ${accessToken}`,
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: new URLSearchParams({
-              resfmt: "JSON",
-              listkey: listKey,
-              contactinfo: JSON.stringify({
-                "Contact Email": cliente.email
-              })
-            })
-          }
-        );
-
-        const resultado = await zohoResponse.json();
-
-        if (resultado.status === "success") {
-          removidos++;
-        } else if (resultado.code !== "2103") {
-          erros.push({ email: cliente.email, resultado });
-        }
-      }
-
-      return { removidos, erros };
-    }
-
-    const resultadoCompraram = await adicionarEmLotes(
-      compraram,
-      process.env.ZOHO_LIST_COMPRARAM
-    );
-
-    const resultadoNaoCompraram = await adicionarEmLotes(
-      naoCompraram,
-      process.env.ZOHO_LIST_NAO_COMPRARAM
-    );
-
     const resultadoCarrinho = await adicionarCarrinhoComLink(
       carrinhoAbandonado,
       process.env.ZOHO_LIST_CARRINHO_ABANDONADO
     );
 
-    const resultadoRemocao = await removerDaLista(
-      compraram,
-      process.env.ZOHO_LIST_NAO_COMPRARAM
-    );
-
     return res.status(200).json({
-      total_clientes: clientes.length,
-      compraram: compraram.length,
-      nao_compraram: naoCompraram.length,
+      total_carrinhos: carrinhos.length,
       carrinho_abandonado: carrinhoAbandonado.length,
-      adicionados_compraram: resultadoCompraram.enviados,
-      adicionados_nao_compraram: resultadoNaoCompraram.enviados,
       adicionados_carrinho_abandonado: resultadoCarrinho.enviados,
-      removidos_de_nao_compraram: resultadoRemocao.removidos,
-      exemplo_carrinho: carrinhoAbandonado[0] || null,
-      erros: [
-        ...resultadoCompraram.erros,
-        ...resultadoNaoCompraram.erros,
-        ...resultadoCarrinho.erros,
-        ...resultadoRemocao.erros
-      ]
+      exemplos_recentes: exemplos,
+      erros: resultadoCarrinho.erros
     });
+
   } catch (erro) {
     return res.status(500).json({
       erro: erro.message
