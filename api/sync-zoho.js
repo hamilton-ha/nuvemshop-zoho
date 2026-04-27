@@ -85,12 +85,13 @@ export default async function handler(req, res) {
     );
 
     return res.status(200).json({
-      total_carrinhos: carrinhos.length,
-      carrinho_abandonado: carrinhoAbandonado.length,
-      adicionados_carrinho_abandonado: resultadoCarrinho.enviados,
-      exemplos_recentes: exemplos,
-      erros: resultadoCarrinho.erros
-    });
+  total_carrinhos: carrinhos.length,
+  carrinho_abandonado: carrinhoAbandonado.length,
+  adicionados_carrinho_abandonado: resultadoCarrinho.enviados,
+  exemplos_recentes: exemplos,
+  list_key_usada: process.env.ZOHO_LIST_CARRINHO_ABANDONADO,
+  erros: resultadoCarrinho.erros
+});
 
   } catch (erro) {
     return res.status(500).json({
