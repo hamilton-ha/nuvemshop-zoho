@@ -23,7 +23,7 @@ export default async function handler(req, res) {
 
     // FILTRAR APENAS ABANDONADOS
     const carrinhoAbandonado = carrinhos
-      .filter(c => c.contact_email && c.contact_accepts_marketing === true)
+      .filter(c => c.contact_email)
       .map(c => ({
         email: c.contact_email,
         name: c.contact_name || "",
