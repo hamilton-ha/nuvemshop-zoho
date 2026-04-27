@@ -4,7 +4,7 @@ export default async function handler(req, res) {
     const nuvemToken = "a687e51c0c454e0f89fe239db9c808d31d2bf15a";
 
     const headers = {
-      "Authentication": `bearer ${nuvemToken}`,
+      Authentication: `bearer ${nuvemToken}`,
       "User-Agent": "Elo Forte App (contato@elofortedigital.com.br)",
       "Content-Type": "application/json"
     };
@@ -16,6 +16,7 @@ export default async function handler(req, res) {
     );
 
     const clientesData = await clientesResp.json();
+
     const clientes = Array.isArray(clientesData)
       ? clientesData.filter(c => c.accepts_marketing === true && c.email)
       : [];
@@ -60,6 +61,7 @@ export default async function handler(req, res) {
       });
     }
 
+    // ADICIONA CONTATOS EM LOTE - PARA LISTAS SIMPLES
     async function adicionarEmLotes(lista, listKey) {
       let enviados = 0;
       let erros = [];
@@ -72,7 +74,7 @@ export default async function handler(req, res) {
           {
             method: "POST",
             headers: {
-              "Authorization": `Zoho-oauthtoken ${accessToken}`,
+              Authorization: `Zoho-oauthtoken ${accessToken}`,
               "Content-Type": "application/x-www-form-urlencoded"
             },
             body: new URLSearchParams({
@@ -95,6 +97,49 @@ export default async function handler(req, res) {
       return { enviados, erros };
     }
 
+    // ADICIONA CARRINHO ABANDONADO COM LINK PERSONALIZADO
+    async function adicionarCarrinhoComLink(lista, listKey) {
+      let enviados = 0;
+      let erros = [];
+
+      for (const cliente of lista) {
+        const zohoResponse = await fetch(
+          "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Zoho-oauthtoken ${accessToken}`,
+              "Content-Type": "application/x-www-form-urlencoded"
+            },
+            body: new URLSearchParams({
+              resfmt: "JSON",
+              listkey: listKey,
+              contactinfo: JSON.stringify({
+                "Contact Email": cliente.email,
+                "First Name": cliente.name || "",
+                link_carrinho: cliente.checkout_url || ""
+              })
+            })
+          }
+        );
+
+        const resultado = await zohoResponse.json();
+
+        if (resultado.status === "success") {
+          enviados++;
+        } else {
+          erros.push({
+            email: cliente.email,
+            link_carrinho: cliente.checkout_url,
+            resultado
+          });
+        }
+      }
+
+      return { enviados, erros };
+    }
+
+    // REMOVE QUEM COMPROU DA LISTA DE NÃO COMPRARAM
     async function removerDaLista(lista, listKey) {
       let removidos = 0;
       let erros = [];
@@ -105,7 +150,7 @@ export default async function handler(req, res) {
           {
             method: "POST",
             headers: {
-              "Authorization": `Zoho-oauthtoken ${accessToken}`,
+              Authorization: `Zoho-oauthtoken ${accessToken}`,
               "Content-Type": "application/x-www-form-urlencoded"
             },
             body: new URLSearchParams({
@@ -140,7 +185,7 @@ export default async function handler(req, res) {
       process.env.ZOHO_LIST_NAO_COMPRARAM
     );
 
-    const resultadoCarrinho = await adicionarEmLotes(
+    const resultadoCarrinho = await adicionarCarrinhoComLink(
       carrinhoAbandonado,
       process.env.ZOHO_LIST_CARRINHO_ABANDONADO
     );
@@ -159,6 +204,7 @@ export default async function handler(req, res) {
       adicionados_nao_compraram: resultadoNaoCompraram.enviados,
       adicionados_carrinho_abandonado: resultadoCarrinho.enviados,
       removidos_de_nao_compraram: resultadoRemocao.removidos,
+      exemplo_carrinho: carrinhoAbandonado[0] || null,
       erros: [
         ...resultadoCompraram.erros,
         ...resultadoNaoCompraram.erros,
@@ -166,7 +212,6 @@ export default async function handler(req, res) {
         ...resultadoRemocao.erros
       ]
     });
-
   } catch (erro) {
     return res.status(500).json({
       erro: erro.message
