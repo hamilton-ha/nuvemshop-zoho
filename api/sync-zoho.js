@@ -61,7 +61,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // ADICIONA CONTATOS EM LOTE - PARA LISTAS SIMPLES
+    // ADICIONA CONTATOS EM LOTE - LISTAS SIMPLES
     async function adicionarEmLotes(lista, listKey) {
       let enviados = 0;
       let erros = [];
@@ -104,7 +104,7 @@ export default async function handler(req, res) {
 
       for (const cliente of lista) {
         const zohoResponse = await fetch(
-          "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
+          "https://campaigns.zoho.com/api/v1.1/json/listsubscribe?update_existing=true",
           {
             method: "POST",
             headers: {
@@ -117,7 +117,7 @@ export default async function handler(req, res) {
               contactinfo: JSON.stringify({
                 "Contact Email": cliente.email,
                 "First Name": cliente.name || "",
-                link_carrinho: cliente.checkout_url || ""
+                "link_carrinho": String(cliente.checkout_url || "")
               })
             })
           }
