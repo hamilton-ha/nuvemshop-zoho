@@ -9,6 +9,8 @@ export default async function handler(req, res) {
     const storeId = body.store_id;
     const customerId = body.id;
     const event = body.event;
+    console.log("WEBHOOK_BODY:", JSON.stringify(body));
+    console.log("WEBHOOK_EVENT:", body.event, "STORE:", body.store_id, "ID:", body.id);
 
     if (!storeId || !customerId) {
       return res.status(400).json({
@@ -26,17 +28,20 @@ export default async function handler(req, res) {
     }
 
     const customerResponse = await fetch(
-      `https://api.nuvemshop.com.br/v1/${storeId}/customers/${customerId}`,
-      {
-        headers: {
-          Authentication: `bearer ${process.env.NUVEMSHOP_ACCESS_TOKEN}`,
-          "User-Agent": "Elo Forte Zoho Integration (contato@elofortedigital.com.br)",
-        },
-      }
-    );
+  `https://api.nuvemshop.com.br/v1/${storeId}/customers/${customerId}`,
+  {
+    headers: {
+      Authentication: `bearer ${process.env.NUVEMSHOP_ACCESS_TOKEN}`,
+      "User-Agent": "Elo Forte Zoho Integration (contato@elofortedigital.com.br)",
+    },
+  }
+);
 
-    const customer = await customerResponse.json();
+const customer = await customerResponse.json();
 
+console.log("CUSTOMER_STATUS:", customerResponse.status);
+console.log("CUSTOMER_RESPONSE:", JSON.stringify(customer));
+    
     if (!customerResponse.ok) {
       return res.status(500).json({
         error: "Erro ao buscar cliente na Nuvemshop",
