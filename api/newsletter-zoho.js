@@ -57,6 +57,11 @@ console.log("CUSTOMER_RESPONSE:", JSON.stringify(customer));
       customer.accepts_marketing === "true" ||
       customer.newsletter === true ||
       customer.newsletter === "true";
+      console.log("ACEITA_MARKETING:", aceitaMarketing);
+      console.log("CUSTOMER_MARKETING_FIELDS:", {
+      accepts_marketing: customer.accepts_marketing,
+      newsletter: customer.newsletter,
+});
 
     if (!email) {
       return res.status(200).json({
@@ -98,6 +103,8 @@ console.log("CUSTOMER_RESPONSE:", JSON.stringify(customer));
     });
 
     const zohoData = await zohoResponse.json();
+    console.log("ZOHO_STATUS:", zohoResponse.status);
+    console.log("ZOHO_RESPONSE:", JSON.stringify(zohoData));
 
     return res.status(200).json({
       success: true,
