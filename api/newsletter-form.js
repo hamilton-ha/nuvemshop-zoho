@@ -45,9 +45,14 @@ function getFormData(req) {
 }
 
 function renderPage(status = "") {
+  const successRedirect =
+    status === "success"
+      ? `<meta http-equiv="refresh" content="3;url=https://elofortedigital.com.br/">`
+      : "";
+
   const successMessage =
     status === "success"
-      ? `<div class="message success">Cadastro realizado com sucesso! Agora você receberá nossas novidades por e-mail.</div>`
+      ? `<div class="message success">Cadastro realizado com sucesso! Você será redirecionado para a Elo Forte em alguns segundos.</div>`
       : "";
 
   const errorMessage =
