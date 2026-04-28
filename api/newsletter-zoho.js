@@ -31,7 +31,7 @@ export default async function handler(req, res) {
   `https://api.nuvemshop.com.br/v1/${storeId}/customers/${customerId}`,
   {
     headers: {
-      Authentication: `bearer ${process.env.a687e51c0c454e0f89fe239db9c808d31d2bf15a}`,
+      Authentication: `bearer ${process.env.NUVEMSHOP_ACCESS_TOKEN}`,
       "User-Agent": "Elo Forte Zoho Integration (contato@elofortedigital.com.br)",
     },
   }
