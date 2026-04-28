@@ -24,6 +24,18 @@ async function getZohoAccessToken() {
   return data.access_token;
 }
 
+function splitFullName(fullName = "") {
+  const parts = fullName.trim().replace(/\s+/g, " ").split(" ");
+
+  const firstName = parts.shift() || "";
+  const lastName = parts.join(" ");
+
+  return {
+    firstName,
+    lastName,
+  };
+}
+
 function getFormData(req) {
   if (!req.body) {
     return {};
@@ -291,11 +303,14 @@ export default async function handler(req, res) {
 
     const zohoAccessToken = await getZohoAccessToken();
 
-    const contactInfo = {
-      "Contact Email": email.trim(),
-      "First Name": name.trim(),
-      origem: "Página Newsletter Elo Forte",
-    };
+    const { firstName, lastName } = splitFullName(name);
+
+const contactInfo = {
+  "Contact Email": email.trim(),
+  "First Name": firstName,
+  "Last Name": lastName,
+  origem: "Página Newsletter Elo Forte",
+};
 
     const zohoParams = new URLSearchParams();
 
