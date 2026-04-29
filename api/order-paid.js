@@ -28,7 +28,6 @@ async function getZohoAccessToken() {
 
   if (!response.ok || !data.access_token) {
     console.log("ZOHO_TOKEN_ERROR:", JSON.stringify(data));
-
     throw new Error("Não foi possível gerar access_token do Zoho");
   }
 
@@ -54,10 +53,48 @@ function getOrderName(order) {
   );
 }
 
-async function atualizarStatusCarrinhoNoZoho({ email, name }) {
-  const accessToken = await getZohoAccessToken();
-
+async function zohoSubscribeToList({ accessToken, listKey, contactinfo }) {
   const zohoUrl = "https://campaigns.zoho.com/api/v1.1/json/listsubscribe";
+
+  const response = await fetch(zohoUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      resfmt: "JSON",
+      listkey: listKey,
+      contactinfo: JSON.stringify(contactinfo),
+    }),
+  });
+
+  return response.json();
+}
+
+async function zohoUnsubscribeFromList({ accessToken, listKey, email }) {
+  const zohoUrl = "https://campaigns.zoho.com/api/v1.1/json/listunsubscribe";
+
+  const response = await fetch(zohoUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      "Content-Type": "application/x-www-form-urlencoded",
+    },
+    body: new URLSearchParams({
+      resfmt: "JSON",
+      listkey: listKey,
+      contactinfo: JSON.stringify({
+        "Contact Email": email,
+      }),
+    }),
+  });
+
+  return response.json();
+}
+
+async function processarCarrinhoRecuperado({ email, name }) {
+  const accessToken = await getZohoAccessToken();
 
   const { firstName, lastName } = splitFullName(name || "");
 
@@ -74,22 +111,29 @@ async function atualizarStatusCarrinhoNoZoho({ email, name }) {
     contactinfo["Last Name"] = lastName;
   }
 
-  const zohoResponse = await fetch(zohoUrl, {
-    method: "POST",
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: new URLSearchParams({
-      resfmt: "JSON",
-      listkey: process.env.ZOHO_LIST_CARRINHO_ABANDONADO,
-      contactinfo: JSON.stringify(contactinfo),
-    }),
+  const resultadoAtualizarAbandonado = await zohoSubscribeToList({
+    accessToken,
+    listKey: process.env.ZOHO_LIST_CARRINHO_ABANDONADO,
+    contactinfo,
   });
 
-  const resultado = await zohoResponse.json();
+  const resultadoAdicionarRecuperado = await zohoSubscribeToList({
+    accessToken,
+    listKey: process.env.ZOHO_LIST_CARRINHO_RECUPERADO,
+    contactinfo,
+  });
 
-  return resultado;
+  const resultadoRemoverAbandonado = await zohoUnsubscribeFromList({
+    accessToken,
+    listKey: process.env.ZOHO_LIST_CARRINHO_ABANDONADO,
+    email,
+  });
+
+  return {
+    resultadoAtualizarAbandonado,
+    resultadoAdicionarRecuperado,
+    resultadoRemoverAbandonado,
+  };
 }
 
 module.exports = async function handler(req, res) {
@@ -119,6 +163,12 @@ module.exports = async function handler(req, res) {
     if (!process.env.ZOHO_LIST_CARRINHO_ABANDONADO) {
       return res.status(500).json({
         erro: "ZOHO_LIST_CARRINHO_ABANDONADO não configurado na Vercel",
+      });
+    }
+
+    if (!process.env.ZOHO_LIST_CARRINHO_RECUPERADO) {
+      return res.status(500).json({
+        erro: "ZOHO_LIST_CARRINHO_RECUPERADO não configurado na Vercel",
       });
     }
 
@@ -168,7 +218,7 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const resultadoZoho = await atualizarStatusCarrinhoNoZoho({
+    const resultadoZoho = await processarCarrinhoRecuperado({
       email,
       name,
     });
