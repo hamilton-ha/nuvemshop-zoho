@@ -46,41 +46,57 @@ module.exports = async function handler(req, res) {
     // PEGAR OS 5 MAIS RECENTES PRA DEBUG
     const exemplos = carrinhoAbandonado.slice(0, 5);
 
-    // TOKEN ZOHO
-    const { firstName, lastName } = splitFullName(cliente.name || "");
+   // ENVIAR CARRINHOS PARA O ZOHO
+async function adicionarCarrinhoComLink(clientes, listKey) {
+  const accessToken = await getZohoAccessToken();
 
-const zohoResponse = await fetch(
-  zohoUrl,
-  {
-    method: "POST",
-    headers: {
-      Authorization: `Zoho-oauthtoken ${accessToken}`,
-      "Content-Type": "application/x-www-form-urlencoded"
-    },
-    body: new URLSearchParams({
-      resfmt: "JSON",
-      listkey: listKey,
-      contactinfo: JSON.stringify({
-        "Contact Email": cliente.email,
-        "First Name": firstName,
-        "Last Name": lastName,
-        "link_carrinho": String(cliente.checkout_url || "")
-      })
-    })
-  }
-);
-        const resultado = await zohoResponse.json();
+  const zohoUrl = "https://campaigns.zoho.com/api/v1.1/json/listsubscribe";
 
-        if (resultado.status === "success") {
-          enviados++;
-        } else {
-          erros.push({ email: cliente.email, resultado });
-        }
+  let enviados = 0;
+  const erros = [];
+
+  for (const cliente of clientes) {
+    try {
+      const { firstName, lastName } = splitFullName(cliente.name || "");
+
+      const zohoResponse = await fetch(zohoUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: new URLSearchParams({
+          resfmt: "JSON",
+          listkey: listKey,
+          contactinfo: JSON.stringify({
+            "Contact Email": cliente.email,
+            "First Name": firstName,
+            "Last Name": lastName,
+            "link_carrinho": String(cliente.checkout_url || "")
+          })
+        })
+      });
+
+      const resultado = await zohoResponse.json();
+
+      if (resultado.status === "success") {
+        enviados++;
+      } else {
+        erros.push({
+          email: cliente.email,
+          resultado
+        });
       }
-
-      return { enviados, erros };
+    } catch (error) {
+      erros.push({
+        email: cliente.email,
+        erro: error.message
+      });
     }
+  }
 
+  return { enviados, erros };
+}
     const resultadoCarrinho = await adicionarCarrinhoComLink(
       carrinhoAbandonado,
       process.env.ZOHO_LIST_CARRINHO_ABANDONADO
@@ -101,3 +117,4 @@ const zohoResponse = await fetch(
     });
   }
 }
+};
