@@ -9,7 +9,7 @@ function splitFullName(fullName = "") {
     lastName,
   };
 }
-
+// Ajuste para separar nome e sobrenome no carrinho abandonado
 module.exports = async function handler(req, res) {
   try {
     const storeId = "4882514";
