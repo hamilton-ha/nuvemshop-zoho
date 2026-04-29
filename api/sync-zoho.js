@@ -56,11 +56,12 @@ async function adicionarCarrinhoComLink(clientes, listKey) {
         body: new URLSearchParams({
           resfmt: "JSON",
           listkey: listKey,
-          contactinfo: JSON.stringify({
-            "Contact Email": cliente.email,
-            "First Name": firstName,
-            "Last Name": lastName,
-            link_carrinho: String(cliente.checkout_url || ""),
+         contactinfo: JSON.stringify({
+  "Contact Email": cliente.email,
+  "First Name": firstName,
+  "Last Name": lastName,
+  link_carrinho: String(cliente.checkout_url || ""),
+  status_carrinho: "abandonado",
           }),
         }),
       });
