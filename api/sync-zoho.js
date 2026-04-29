@@ -1,3 +1,15 @@
+function splitFullName(fullName = "") {
+  const parts = fullName.trim().replace(/\s+/g, " ").split(" ");
+
+  const firstName = parts.shift() || "";
+  const lastName = parts.join(" ");
+
+  return {
+    firstName,
+    lastName,
+  };
+}
+
 export default async function handler(req, res) {
   try {
     const storeId = "4882514";
@@ -35,38 +47,28 @@ export default async function handler(req, res) {
     const exemplos = carrinhoAbandonado.slice(0, 5);
 
     // TOKEN ZOHO
-    const zohoTokenResponse = await fetch(
-      "https://project-2jpn7.vercel.app/api/zoho-token"
-    );
+    const { firstName, lastName } = splitFullName(cliente.name || "");
 
-    const zohoTokenData = await zohoTokenResponse.json();
-    const accessToken = zohoTokenData.access_token;
-
-    async function adicionarCarrinhoComLink(lista, listKey) {
-      let enviados = 0;
-      let erros = [];
-
-      for (const cliente of lista) {
-        const zohoResponse = await fetch(
-          "https://campaigns.zoho.com/api/v1.1/json/listsubscribe?update_existing=true",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Zoho-oauthtoken ${accessToken}`,
-              "Content-Type": "application/x-www-form-urlencoded"
-            },
-            body: new URLSearchParams({
-              resfmt: "JSON",
-              listkey: listKey,
-              contactinfo: JSON.stringify({
-                "Contact Email": cliente.email,
-                "First Name": cliente.name || "",
-                "link_carrinho": String(cliente.checkout_url || "")
-              })
-            })
-          }
-        );
-
+const zohoResponse = await fetch(
+  zohoUrl,
+  {
+    method: "POST",
+    headers: {
+      Authorization: `Zoho-oauthtoken ${accessToken}`,
+      "Content-Type": "application/x-www-form-urlencoded"
+    },
+    body: new URLSearchParams({
+      resfmt: "JSON",
+      listkey: listKey,
+      contactinfo: JSON.stringify({
+        "Contact Email": cliente.email,
+        "First Name": firstName,
+        "Last Name": lastName,
+        "link_carrinho": String(cliente.checkout_url || "")
+      })
+    })
+  }
+);
         const resultado = await zohoResponse.json();
 
         if (resultado.status === "success") {
