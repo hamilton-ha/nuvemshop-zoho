@@ -130,13 +130,14 @@ module.exports = async function handler(req, res) {
     carrinhos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
     const carrinhoAbandonado = carrinhos
-      .filter((c) => c.contact_email)
-      .map((c) => ({
-        email: c.contact_email,
-        name: c.contact_name || "",
-        checkout_url: c.abandoned_checkout_url || "",
-        created_at: c.created_at,
-      }));
+  .filter((c) => c.contact_email)
+  .slice(0, 20)
+  .map((c) => ({
+    email: c.contact_email,
+    name: c.contact_name || "",
+    checkout_url: c.abandoned_checkout_url || "",
+    created_at: c.created_at,
+  }));
 
     const exemplos = carrinhoAbandonado.slice(0, 5);
 
