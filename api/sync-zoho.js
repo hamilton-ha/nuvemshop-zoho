@@ -10,7 +10,7 @@ function splitFullName(fullName = "") {
   };
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     const storeId = "4882514";
     const nuvemToken = "a687e51c0c454e0f89fe239db9c808d31d2bf15a";
