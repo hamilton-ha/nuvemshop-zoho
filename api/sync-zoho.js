@@ -43,7 +43,7 @@ async function adicionarCarrinhoComLink(clientes, listKey) {
   let enviados = 0;
   const erros = [];
 
-  for (const cliente of clientes) {
+  async function enviarCliente(cliente) {
     try {
       const { firstName, lastName } = splitFullName(cliente.name || "");
 
@@ -56,12 +56,12 @@ async function adicionarCarrinhoComLink(clientes, listKey) {
         body: new URLSearchParams({
           resfmt: "JSON",
           listkey: listKey,
-         contactinfo: JSON.stringify({
-  "Contact Email": cliente.email,
-  "First Name": firstName,
-  "Last Name": lastName,
-  link_carrinho: String(cliente.checkout_url || ""),
-  status_carrinho: "abandonado",
+          contactinfo: JSON.stringify({
+            "Contact Email": cliente.email,
+            "First Name": firstName,
+            "Last Name": lastName,
+            link_carrinho: String(cliente.checkout_url || ""),
+            status_carrinho: "abandonado",
           }),
         }),
       });
@@ -84,9 +84,16 @@ async function adicionarCarrinhoComLink(clientes, listKey) {
     }
   }
 
+  const tamanhoDoLote = 5;
+
+  for (let i = 0; i < clientes.length; i += tamanhoDoLote) {
+    const lote = clientes.slice(i, i + tamanhoDoLote);
+
+    await Promise.all(lote.map((cliente) => enviarCliente(cliente)));
+  }
+
   return { enviados, erros };
 }
-
 module.exports = async function handler(req, res) {
   try {
     const storeId = process.env.NUVEMSHOP_STORE_ID || "4882514";
@@ -131,7 +138,6 @@ module.exports = async function handler(req, res) {
 
     const carrinhoAbandonado = carrinhos
   .filter((c) => c.contact_email)
-  .slice(0, 20)
   .map((c) => ({
     email: c.contact_email,
     name: c.contact_name || "",
