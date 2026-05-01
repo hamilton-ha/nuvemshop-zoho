@@ -136,7 +136,7 @@ module.exports = async function handler(req, res) {
 
     carrinhos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    const HORAS_SINCRONIZACAO = 3;
+    const HORAS_SINCRONIZACAO = 6;
 
 const limiteSincronizacao = new Date(
   Date.now() - HORAS_SINCRONIZACAO * 60 * 60 * 1000
