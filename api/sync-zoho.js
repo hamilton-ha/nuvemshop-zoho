@@ -136,8 +136,16 @@ module.exports = async function handler(req, res) {
 
     carrinhos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
 
-    const carrinhoAbandonado = carrinhos
+    const HORAS_SINCRONIZACAO = 3;
+
+const limiteSincronizacao = new Date(
+  Date.now() - HORAS_SINCRONIZACAO * 60 * 60 * 1000
+);
+
+const carrinhoAbandonado = carrinhos
   .filter((c) => c.contact_email)
+  .filter((c) => new Date(c.created_at) >= limiteSincronizacao)
+  .filter((c) => !c.completed_at && !c.order_id && !c.order)
   .map((c) => ({
     email: c.contact_email,
     name: c.contact_name || "",
@@ -153,13 +161,14 @@ module.exports = async function handler(req, res) {
     );
 
     return res.status(200).json({
-      total_carrinhos: carrinhos.length,
-      carrinho_abandonado: carrinhoAbandonado.length,
-      adicionados_carrinho_abandonado: resultadoCarrinho.enviados,
-      exemplos_recentes: exemplos,
-      list_key_usada: process.env.ZOHO_LIST_CARRINHO_ABANDONADO,
-      erros: resultadoCarrinho.erros,
-    });
+  total_carrinhos: carrinhos.length,
+  carrinho_abandonado: carrinhoAbandonado.length,
+  adicionados_carrinho_abandonado: resultadoCarrinho.enviados,
+  horas_sincronizacao: HORAS_SINCRONIZACAO,
+  exemplos_recentes: exemplos,
+  list_key_usada: process.env.ZOHO_LIST_CARRINHO_ABANDONADO,
+  erros: resultadoCarrinho.erros
+});
   } catch (erro) {
     console.log("SYNC_ZOHO_ERROR:", erro);
 
