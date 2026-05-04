@@ -18,6 +18,11 @@ export default async function handler(req, res) {
 if (req.method === "GET" && req.query.action === "report") {
   return await generateRestockReport(req, res);
 }
+
+  // Nova função: listar clientes prontos para receber aviso
+if (req.method === "GET" && req.query.action === "ready-to-notify") {
+  return await getReadyToNotify(req, res);
+}
   
   // Se for GET sem a action correta
   if (req.method === "GET") {
@@ -485,6 +490,84 @@ async function generateRestockReport(req, res) {
     return res.status(500).json({
       ok: false,
       message: "Erro interno ao gerar relatório.",
+      error: error.message,
+    });
+  }
+}
+
+// Função para listar clientes prontos para receber aviso
+async function getReadyToNotify(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        ok: false,
+        message: "Variáveis do Supabase não configuradas na Vercel.",
+      });
+    }
+
+    const requestsUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?status=eq.disponivel` +
+      `&select=id,created_at,name,email,product_id,variant_id,product_name,product_url,status,notified_at` +
+      `&order=created_at.asc`;
+
+    const requestsResponse = await fetch(requestsUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const requestsData = await requestsResponse.json();
+
+    if (!requestsResponse.ok) {
+      console.error("Erro ao buscar clientes prontos para aviso:", requestsData);
+
+      return res.status(500).json({
+        ok: false,
+        message: "Erro ao buscar clientes prontos para aviso no Supabase.",
+        error: requestsData,
+      });
+    }
+
+    if (!requestsData || requestsData.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        message: "Nenhum cliente pronto para receber aviso no momento.",
+        total: 0,
+        items: [],
+      });
+    }
+
+    const items = requestsData.map((item) => ({
+      id: item.id,
+      name: item.name,
+      email: item.email,
+      product_id: item.product_id,
+      variant_id: item.variant_id,
+      product_name: item.product_name,
+      product_url: item.product_url,
+      status: item.status,
+      created_at: item.created_at,
+      notified_at: item.notified_at,
+    }));
+
+    return res.status(200).json({
+      ok: true,
+      message: "Clientes prontos para receber aviso listados com sucesso.",
+      total: items.length,
+      items,
+    });
+  } catch (error) {
+    console.error("Erro geral ao listar clientes prontos para aviso:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Erro interno ao listar clientes prontos para aviso.",
       error: error.message,
     });
   }
