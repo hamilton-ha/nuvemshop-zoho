@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Teste Reposição de Estoque</title>
+
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #f7f3f0;
+      margin: 0;
+      padding: 40px 16px;
+      color: #333;
+    }
+
+    .box {
+      max-width: 520px;
+      margin: 0 auto;
+      background: #fff;
+      border-radius: 18px;
+      padding: 28px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+    }
+
+    h1 {
+      margin-top: 0;
+      font-size: 26px;
+      color: #333;
+    }
+
+    p {
+      line-height: 1.5;
+    }
+
+    label {
+      display: block;
+      margin-top: 16px;
+      font-weight: bold;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px;
+      margin-top: 6px;
+      border: 1px solid #ddd;
+      border-radius: 10px;
+      font-size: 15px;
+    }
+
+    button {
+      width: 100%;
+      margin-top: 22px;
+      padding: 14px;
+      border: none;
+      border-radius: 999px;
+      background: #d9799f;
+      color: #fff;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      opacity: 0.7;
+      cursor: not-allowed;
+    }
+
+    .msg {
+      margin-top: 18px;
+      padding: 12px;
+      border-radius: 10px;
+      display: none;
+    }
+
+    .success {
+      display: block;
+      background: #e7f7ec;
+      color: #216b36;
+    }
+
+    .error {
+      display: block;
+      background: #fdeaea;
+      color: #9b2226;
+    }
+  </style>
+</head>
+<body>
+  <div class="box">
+    <h1>Avise-me quando chegar</h1>
+
+    <p>
+      Este é um teste da automação de reposição de estoque da Elo Forte.
+      Ao enviar, o cadastro será gravado no Supabase pela API da Vercel.
+    </p>
+
+    <form id="restockForm">
+      <label for="name">Nome</label>
+      <input id="name" name="name" type="text" placeholder="Seu nome" />
+
+      <label for="email">E-mail</label>
+      <input id="email" name="email" type="email" placeholder="seuemail@exemplo.com" required />
+
+      <input type="hidden" id="product_id" value="123456" />
+      <input type="hidden" id="variant_id" value="987654" />
+      <input type="hidden" id="product_name" value="Produto Teste Reposição Página" />
+      <input type="hidden" id="product_url" value="https://elofortedigital.com.br/produtos/" />
+
+      <button type="submit" id="submitBtn">Quero ser avisada</button>
+
+      <div id="message" class="msg"></div>
+    </form>
+  </div>
+
+  <script>
+    const form = document.getElementById("restockForm");
+    const button = document.getElementById("submitBtn");
+    const messageBox = document.getElementById("message");
+
+    form.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      button.disabled = true;
+      button.textContent = "Enviando...";
+      messageBox.className = "msg";
+      messageBox.textContent = "";
+
+      const payload = {
+        name: document.getElementById("name").value,
+        email: document.getElementById("email").value,
+        product_id: document.getElementById("product_id").value,
+        variant_id: document.getElementById("variant_id").value,
+        product_name: document.getElementById("product_name").value,
+        product_url: document.getElementById("product_url").value
+      };
+
+      try {
+        const response = await fetch("https://project-2jpn7.vercel.app/api/restock-request", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (!response.ok || !result.ok) {
+          throw new Error(result.message || "Não foi possível registrar sua inscrição.");
+        }
+
+        messageBox.className = "msg success";
+        messageBox.textContent = "Pronto! Você será avisada quando este produto voltar ao estoque.";
+        form.reset();
+      } catch (error) {
+        messageBox.className = "msg error";
+        messageBox.textContent = "Ops! Não foi possível registrar agora. Tente novamente em alguns instantes.";
+        console.error(error);
+      } finally {
+        button.disabled = false;
+        button.textContent = "Quero ser avisada";
+      }
+    });
+  </script>
+</body>
+</html>
