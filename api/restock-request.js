@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   // Libera chamadas vindas do site
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   // Responde a requisições de verificação do navegador
@@ -9,7 +9,20 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // Aceita somente POST
+  // Nova função: verificar estoque sem criar uma nova rota na Vercel
+  if (req.method === "GET" && req.query.action === "check-restock") {
+    return await checkRestock(req, res);
+  }
+
+  // Se for GET sem a action correta
+  if (req.method === "GET") {
+    return res.status(200).json({
+      ok: true,
+      message: "Rota ativa. Para verificar estoque, use ?action=check-restock",
+    });
+  }
+
+  // Aceita somente POST para cadastro no formulário
   if (req.method !== "POST") {
     return res.status(405).json({
       ok: false,
@@ -131,6 +144,181 @@ export default async function handler(req, res) {
     return res.status(500).json({
       ok: false,
       message: "Erro interno ao registrar inscrição.",
+      error: error.message,
+    });
+  }
+}
+
+// Função de verificação de estoque
+async function checkRestock(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const nuvemshopStoreId = process.env.NUVEMSHOP_STORE_ID;
+    const nuvemshopAccessToken = process.env.NUVEMSHOP_ACCESS_TOKEN;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        ok: false,
+        message: "Variáveis do Supabase não configuradas na Vercel.",
+      });
+    }
+
+    if (!nuvemshopStoreId || !nuvemshopAccessToken) {
+      return res.status(500).json({
+        ok: false,
+        message: "Variáveis da Nuvemshop não configuradas na Vercel.",
+        required: ["NUVEMSHOP_STORE_ID", "NUVEMSHOP_ACCESS_TOKEN"],
+      });
+    }
+
+    // 1. Busca no Supabase todos os pedidos ainda aguardando aviso
+    const requestsUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?status=eq.aguardando` +
+      `&select=id,created_at,name,email,product_id,variant_id,product_name,product_url,status,notified_at` +
+      `&order=created_at.asc`;
+
+    const requestsResponse = await fetch(requestsUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const requestsData = await requestsResponse.json();
+
+    if (!requestsResponse.ok) {
+      console.error("Erro ao buscar registros aguardando:", requestsData);
+
+      return res.status(500).json({
+        ok: false,
+        message: "Erro ao buscar registros aguardando no Supabase.",
+        error: requestsData,
+      });
+    }
+
+    if (!requestsData || requestsData.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        message: "Nenhum produto aguardando reposição.",
+        total: 0,
+        items: [],
+      });
+    }
+
+    const results = [];
+
+    // 2. Consulta cada produto na Nuvemshop
+    for (const request of requestsData) {
+      const productId = String(request.product_id || "").trim();
+      const variantId = request.variant_id ? String(request.variant_id).trim() : "";
+
+      if (!productId) {
+        results.push({
+          id: request.id,
+          email: request.email,
+          product_name: request.product_name,
+          status_check: "product_id_ausente",
+          available: false,
+        });
+
+        continue;
+      }
+
+      const productResponse = await fetch(
+        `https://api.nuvemshop.com.br/v1/${nuvemshopStoreId}/products/${productId}`,
+        {
+          method: "GET",
+          headers: {
+            Authentication: `bearer ${nuvemshopAccessToken}`,
+            "User-Agent": "Elo Forte Restock Automation",
+          },
+        }
+      );
+
+      if (!productResponse.ok) {
+        results.push({
+          id: request.id,
+          email: request.email,
+          product_id: request.product_id,
+          variant_id: request.variant_id,
+          product_name: request.product_name,
+          status_check: "erro_ao_consultar_nuvemshop",
+          http_status: productResponse.status,
+          available: false,
+        });
+
+        continue;
+      }
+
+      const product = await productResponse.json();
+
+      const variants = Array.isArray(product.variants) ? product.variants : [];
+
+      let variant = null;
+
+      if (variantId) {
+        variant = variants.find((item) => String(item.id) === String(variantId));
+      }
+
+      // Se não tiver variant_id, usa a primeira variação encontrada
+      if (!variant && variants.length > 0 && !variantId) {
+        variant = variants[0];
+      }
+
+      if (!variant) {
+        results.push({
+          id: request.id,
+          email: request.email,
+          product_id: request.product_id,
+          variant_id: request.variant_id,
+          product_name: request.product_name,
+          status_check: "variante_nao_encontrada",
+          available: false,
+        });
+
+        continue;
+      }
+
+      const stock = Number(variant.stock || 0);
+      const available = stock > 0;
+
+      results.push({
+        id: request.id,
+        name: request.name,
+        email: request.email,
+        product_id: request.product_id,
+        variant_id: request.variant_id,
+        product_name: request.product_name,
+        product_url: request.product_url,
+        stock,
+        available,
+        status_check: available ? "disponivel" : "sem_estoque",
+      });
+    }
+
+    return res.status(200).json({
+      ok: true,
+      message: "Verificação de estoque concluída.",
+      total: results.length,
+      disponiveis: results.filter((item) => item.available === true).length,
+      sem_estoque: results.filter((item) => item.status_check === "sem_estoque").length,
+      com_erro: results.filter(
+        (item) =>
+          item.status_check !== "sem_estoque" &&
+          item.status_check !== "disponivel"
+      ).length,
+      items: results,
+    });
+  } catch (error) {
+    console.error("Erro geral ao verificar estoque:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Erro interno ao verificar reposição.",
       error: error.message,
     });
   }
