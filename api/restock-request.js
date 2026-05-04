@@ -23,6 +23,11 @@ if (req.method === "GET" && req.query.action === "report") {
 if (req.method === "GET" && req.query.action === "ready-to-notify") {
   return await getReadyToNotify(req, res);
 }
+
+  // Nova função: prévia dos e-mails de reposição, sem enviar
+if (req.method === "GET" && req.query.action === "preview-restock-emails") {
+  return await previewRestockEmails(req, res);
+}
   
   // Se for GET sem a action correta
   if (req.method === "GET") {
@@ -568,6 +573,133 @@ async function getReadyToNotify(req, res) {
     return res.status(500).json({
       ok: false,
       message: "Erro interno ao listar clientes prontos para aviso.",
+      error: error.message,
+    });
+  }
+}
+
+// Função para pré-visualizar os e-mails de aviso de reposição, sem enviar
+async function previewRestockEmails(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        ok: false,
+        message: "Variáveis do Supabase não configuradas na Vercel.",
+      });
+    }
+
+    const requestsUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?status=eq.disponivel` +
+      `&select=id,created_at,name,email,product_id,variant_id,product_name,product_url,status,notified_at` +
+      `&order=created_at.asc`;
+
+    const requestsResponse = await fetch(requestsUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const requestsData = await requestsResponse.json();
+
+    if (!requestsResponse.ok) {
+      console.error("Erro ao buscar clientes para prévia de e-mail:", requestsData);
+
+      return res.status(500).json({
+        ok: false,
+        message: "Erro ao buscar clientes disponíveis para prévia de e-mail.",
+        error: requestsData,
+      });
+    }
+
+    if (!requestsData || requestsData.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        message: "Nenhum cliente com produto disponível para pré-visualizar e-mail.",
+        total: 0,
+        items: [],
+      });
+    }
+
+    const items = requestsData.map((item) => {
+      const firstName =
+        item.name && String(item.name).trim()
+          ? String(item.name).trim().split(" ")[0]
+          : "Olá";
+
+      const productName = item.product_name || "o produto que você estava aguardando";
+      const productUrl = item.product_url || "https://elofortedigital.com.br/produtos/";
+
+      const subject = "O produto que você queria voltou ao estoque 💛";
+
+      const textBody =
+`Olá, ${firstName}!
+
+Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:
+
+${productName}
+
+Você pode acessar por aqui:
+${productUrl}
+
+Como a reposição pode acabar novamente, vale garantir o seu enquanto estiver disponível.
+
+Com carinho,
+Elo Forte`;
+
+      const htmlBody =
+`<p>Olá, ${firstName}!</p>
+
+<p>Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:</p>
+
+<p><strong>${productName}</strong></p>
+
+<p>
+  <a href="${productUrl}" target="_blank">
+    Ver produto na loja
+  </a>
+</p>
+
+<p>Como a reposição pode acabar novamente, vale garantir o seu enquanto estiver disponível.</p>
+
+<p>Com carinho,<br>Elo Forte</p>`;
+
+      return {
+        id: item.id,
+        name: item.name,
+        email: item.email,
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        product_name: productName,
+        product_url: productUrl,
+        status: item.status,
+        notified_at: item.notified_at,
+        email_preview: {
+          to: item.email,
+          subject,
+          text_body: textBody,
+          html_body: htmlBody,
+        },
+      };
+    });
+
+    return res.status(200).json({
+      ok: true,
+      message: "Prévia dos e-mails de reposição gerada com sucesso. Nenhum e-mail foi enviado.",
+      total: items.length,
+      items,
+    });
+  } catch (error) {
+    console.error("Erro geral ao gerar prévia dos e-mails:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Erro interno ao gerar prévia dos e-mails.",
       error: error.message,
     });
   }
