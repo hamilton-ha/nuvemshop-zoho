@@ -260,15 +260,26 @@ async function checkRestock(req, res) {
 
       let variant = null;
 
-      if (variantId) {
-        variant = variants.find((item) => String(item.id) === String(variantId));
-      }
+     if (variantId) {
+  variant = variants.find((item) => {
+    const itemId = String(item.id || "").trim();
+    const itemSku = String(item.sku || "").trim();
+    const receivedVariantId = String(variantId || "").trim();
 
-      // Se não tiver variant_id, usa a primeira variação encontrada
-      if (!variant && variants.length > 0 && !variantId) {
-        variant = variants[0];
-      }
+    return itemId === receivedVariantId || itemSku === receivedVariantId;
+  });
+}
 
+// Se não encontrar pelo ID/SKU, mas o produto tiver apenas uma variante,
+// usa automaticamente a única variante existente
+if (!variant && variants.length === 1) {
+  variant = variants[0];
+}
+
+// Se não tiver variant_id e houver variações, usa a primeira
+if (!variant && variants.length > 0 && !variantId) {
+  variant = variants[0];
+}
       if (!variant) {
   results.push({
     id: request.id,
