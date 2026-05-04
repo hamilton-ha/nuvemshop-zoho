@@ -300,20 +300,54 @@ if (!variant && variants.length > 0 && !variantId) {
   continue;
 }
       const stock = Number(variant.stock || 0);
-      const available = stock > 0;
+const available = stock > 0;
 
-      results.push({
-        id: request.id,
-        name: request.name,
-        email: request.email,
-        product_id: request.product_id,
-        variant_id: request.variant_id,
-        product_name: request.product_name,
-        product_url: request.product_url,
-        stock,
-        available,
-        status_check: available ? "disponivel" : "sem_estoque",
-      });
+let statusUpdated = false;
+let updateError = null;
+
+// Se voltou ao estoque, atualiza o status no Supabase
+if (available) {
+  const updateResponse = await fetch(
+    `${supabaseUrl}/rest/v1/restock_requests?id=eq.${encodeURIComponent(request.id)}`,
+    {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        status: "disponivel",
+      }),
+    }
+  );
+
+  const updateData = await updateResponse.json();
+
+  if (!updateResponse.ok) {
+    statusUpdated = false;
+    updateError = updateData;
+    console.error("Erro ao atualizar status para disponivel:", updateData);
+  } else {
+    statusUpdated = true;
+  }
+}
+
+results.push({
+  id: request.id,
+  name: request.name,
+  email: request.email,
+  product_id: request.product_id,
+  variant_id: request.variant_id,
+  product_name: request.product_name,
+  product_url: request.product_url,
+  stock,
+  available,
+  status_check: available ? "disponivel" : "sem_estoque",
+  status_updated: statusUpdated,
+  update_error: updateError,
+});
     }
 
     return res.status(200).json({
