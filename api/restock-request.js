@@ -14,6 +14,11 @@ export default async function handler(req, res) {
     return await checkRestock(req, res);
   }
 
+  // Nova função: relatório de produtos mais aguardados
+if (req.method === "GET" && req.query.action === "report") {
+  return await generateRestockReport(req, res);
+}
+  
   // Se for GET sem a action correta
   if (req.method === "GET") {
     return res.status(200).json({
@@ -369,6 +374,117 @@ results.push({
     return res.status(500).json({
       ok: false,
       message: "Erro interno ao verificar reposição.",
+      error: error.message,
+    });
+  }
+}
+
+// Função de relatório dos produtos mais aguardados
+async function generateRestockReport(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        ok: false,
+        message: "Variáveis do Supabase não configuradas na Vercel.",
+      });
+    }
+
+    const requestsUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?status=eq.aguardando` +
+      `&select=id,created_at,name,email,product_id,variant_id,product_name,product_url,status` +
+      `&order=created_at.desc`;
+
+    const requestsResponse = await fetch(requestsUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const requestsData = await requestsResponse.json();
+
+    if (!requestsResponse.ok) {
+      console.error("Erro ao buscar dados para relatório:", requestsData);
+
+      return res.status(500).json({
+        ok: false,
+        message: "Erro ao buscar dados no Supabase para gerar relatório.",
+        error: requestsData,
+      });
+    }
+
+    if (!requestsData || requestsData.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        message: "Nenhum produto aguardando reposição no momento.",
+        total_products: 0,
+        total_requests: 0,
+        items: [],
+      });
+    }
+
+    const grouped = {};
+
+    for (const item of requestsData) {
+      const key = `${item.product_id || ""}__${item.variant_id || ""}`;
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          product_id: item.product_id,
+          variant_id: item.variant_id,
+          product_name: item.product_name,
+          product_url: item.product_url,
+          waiting_count: 0,
+          emails: [],
+          first_request_at: item.created_at,
+          last_request_at: item.created_at,
+        };
+      }
+
+      grouped[key].waiting_count += 1;
+
+      if (item.email && !grouped[key].emails.includes(item.email)) {
+        grouped[key].emails.push(item.email);
+      }
+
+      const currentDate = new Date(item.created_at);
+      const firstDate = new Date(grouped[key].first_request_at);
+      const lastDate = new Date(grouped[key].last_request_at);
+
+      if (currentDate < firstDate) {
+        grouped[key].first_request_at = item.created_at;
+      }
+
+      if (currentDate > lastDate) {
+        grouped[key].last_request_at = item.created_at;
+      }
+    }
+
+    const items = Object.values(grouped)
+      .map((item) => ({
+        ...item,
+        unique_emails_count: item.emails.length,
+      }))
+      .sort((a, b) => b.waiting_count - a.waiting_count);
+
+    return res.status(200).json({
+      ok: true,
+      message: "Relatório de produtos mais aguardados gerado com sucesso.",
+      total_products: items.length,
+      total_requests: requestsData.length,
+      items,
+    });
+  } catch (error) {
+    console.error("Erro geral ao gerar relatório:", error);
+
+    return res.status(500).json({
+      ok: false,
+      message: "Erro interno ao gerar relatório.",
       error: error.message,
     });
   }
