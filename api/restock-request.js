@@ -644,10 +644,10 @@ Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:
 
 ${productName}
 
-Você pode acessar por aqui:
+Você pode ver aqui:
 ${productUrl}
 
-Como a reposição pode acabar novamente, vale garantir o seu enquanto estiver disponível.
+Como algumas reposições são limitadas, vale garantir o seu enquanto estiver disponível.
 
 Com carinho,
 Elo Forte`;
