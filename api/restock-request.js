@@ -45,7 +45,50 @@ export default async function handler(req, res) {
       });
     }
 
-    const response = await fetch(`${supabaseUrl}/rest/v1/restock_requests`, {
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedProductId = String(product_id);
+    const normalizedVariantId = variant_id ? String(variant_id) : "";
+
+    // 1. Verifica se já existe inscrição aguardando para o mesmo e-mail + produto + variação
+    const duplicateUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?email=eq.${encodeURIComponent(normalizedEmail)}` +
+      `&product_id=eq.${encodeURIComponent(normalizedProductId)}` +
+      `&variant_id=eq.${encodeURIComponent(normalizedVariantId)}` +
+      `&status=eq.aguardando` +
+      `&select=id,email,product_id,variant_id,status`;
+
+    const duplicateResponse = await fetch(duplicateUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const duplicateData = await duplicateResponse.json();
+
+    if (!duplicateResponse.ok) {
+      console.error("Erro ao verificar duplicidade:", duplicateData);
+
+      return res.status(500).json({
+        ok: false,
+        message: "Erro ao verificar inscrição existente.",
+        error: duplicateData,
+      });
+    }
+
+    if (duplicateData.length > 0) {
+      return res.status(200).json({
+        ok: true,
+        duplicate: true,
+        message: "Você já está cadastrada para ser avisada sobre este produto.",
+        data: duplicateData[0],
+      });
+    }
+
+    // 2. Se não existe duplicidade, cria nova inscrição
+    const insertResponse = await fetch(`${supabaseUrl}/rest/v1/restock_requests`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -55,31 +98,32 @@ export default async function handler(req, res) {
       },
       body: JSON.stringify({
         name: name || null,
-        email: String(email).trim().toLowerCase(),
-        product_id: String(product_id),
-        variant_id: variant_id ? String(variant_id) : null,
+        email: normalizedEmail,
+        product_id: normalizedProductId,
+        variant_id: normalizedVariantId || null,
         product_name: String(product_name),
         product_url: product_url || null,
         status: "aguardando",
       }),
     });
 
-    const data = await response.json();
+    const insertData = await insertResponse.json();
 
-    if (!response.ok) {
-      console.error("Erro Supabase:", data);
+    if (!insertResponse.ok) {
+      console.error("Erro Supabase:", insertData);
 
       return res.status(500).json({
         ok: false,
         message: "Erro ao salvar inscrição no Supabase.",
-        error: data,
+        error: insertData,
       });
     }
 
     return res.status(200).json({
       ok: true,
+      duplicate: false,
       message: "Inscrição de reposição registrada com sucesso.",
-      data,
+      data: insertData,
     });
   } catch (error) {
     console.error("Erro geral:", error);
