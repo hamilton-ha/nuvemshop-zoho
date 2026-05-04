@@ -277,11 +277,35 @@ async function checkRestock(req, res) {
 
      if (variantId) {
   variant = variants.find((item) => {
-    const itemId = String(item.id || "").trim();
-    const itemSku = String(item.sku || "").trim();
-    const receivedVariantId = String(variantId || "").trim();
+    const receivedVariantId = String(variantId || "").trim().toLowerCase();
 
-    return itemId === receivedVariantId || itemSku === receivedVariantId;
+    const itemId = String(item.id || "").trim().toLowerCase();
+    const itemSku = String(item.sku || "").trim().toLowerCase();
+    const itemName = String(item.name || "").trim().toLowerCase();
+
+    const itemValues = Array.isArray(item.values)
+      ? item.values
+          .map((value) => {
+            if (typeof value === "string") return value;
+
+            if (value && typeof value === "object") {
+              return value.pt || value.name || value.value || "";
+            }
+
+            return "";
+          })
+          .join(" ")
+          .trim()
+          .toLowerCase()
+      : "";
+
+    return (
+      itemId === receivedVariantId ||
+      itemSku === receivedVariantId ||
+      itemName === receivedVariantId ||
+      itemValues === receivedVariantId ||
+      itemValues.includes(receivedVariantId)
+    );
   });
 }
 
