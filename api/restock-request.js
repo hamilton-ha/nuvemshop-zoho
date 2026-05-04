@@ -79,12 +79,12 @@ if (req.method === "GET" && req.query.action === "preview-restock-emails") {
 
     // 1. Verifica se já existe inscrição aguardando para o mesmo e-mail + produto + variação
     const duplicateUrl =
-      `${supabaseUrl}/rest/v1/restock_requests` +
-      `?email=eq.${encodeURIComponent(normalizedEmail)}` +
-      `&product_id=eq.${encodeURIComponent(normalizedProductId)}` +
-      `&variant_id=eq.${encodeURIComponent(normalizedVariantId)}` +
-      `&status=eq.aguardando` +
-      `&select=id,email,product_id,variant_id,status`;
+  `${supabaseUrl}/rest/v1/restock_requests` +
+  `?email=eq.${encodeURIComponent(normalizedEmail)}` +
+  `&product_id=eq.${encodeURIComponent(normalizedProductId)}` +
+  `&variant_id=eq.${encodeURIComponent(normalizedVariantId)}` +
+  `&status=in.(aguardando,disponivel)` +
+  `&select=id,email,product_id,variant_id,status`;
 
     const duplicateResponse = await fetch(duplicateUrl, {
       method: "GET",
