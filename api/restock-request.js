@@ -270,19 +270,24 @@ async function checkRestock(req, res) {
       }
 
       if (!variant) {
-        results.push({
-          id: request.id,
-          email: request.email,
-          product_id: request.product_id,
-          variant_id: request.variant_id,
-          product_name: request.product_name,
-          status_check: "variante_nao_encontrada",
-          available: false,
-        });
+  results.push({
+    id: request.id,
+    email: request.email,
+    product_id: request.product_id,
+    variant_id_recebido: request.variant_id,
+    product_name: request.product_name,
+    status_check: "variante_nao_encontrada",
+    available: false,
+    variantes_disponiveis: variants.map((item) => ({
+      id: item.id,
+      name: item.name,
+      stock: item.stock,
+      sku: item.sku,
+    })),
+  });
 
-        continue;
-      }
-
+  continue;
+}
       const stock = Number(variant.stock || 0);
       const available = stock > 0;
 
