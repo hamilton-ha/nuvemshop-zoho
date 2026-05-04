@@ -152,8 +152,13 @@
         }
 
         messageBox.className = "msg success";
-        messageBox.textContent = "Pronto! Você será avisada quando este produto voltar ao estoque.";
-        form.reset();
+
+if (result.duplicate) {
+  messageBox.textContent = "Você já está cadastrada para receber o aviso deste produto.";
+} else {
+  messageBox.textContent = "Pronto! Você será avisada quando este produto voltar ao estoque.";
+  form.reset();
+}
       } catch (error) {
         messageBox.className = "msg error";
         messageBox.textContent = "Ops! Não foi possível registrar agora. Tente novamente em alguns instantes.";
