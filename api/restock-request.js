@@ -126,7 +126,7 @@ if (req.method === "GET" && req.query.action === "preview-restock-emails") {
       return res.status(200).json({
         ok: true,
         duplicate: true,
-        message: "Você já está cadastrada para ser avisada sobre este produto.",
+        message: "Você já está na lista para este aviso.",
         data: duplicateData[0],
       });
     }
@@ -1396,7 +1396,7 @@ async function sendRestockEmails(req, res) {
         text_body:
 `Olá, ${firstName}!
 
-Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:
+Boa notícia: o produto que você estava aguardando voltou ao estoque:
 
 ${productName}
 
@@ -1543,7 +1543,7 @@ async function sendRestockEmailsPreviewHtml(req, res) {
             <td>
               <div class="email-box">
                 Olá, ${escapeHtml(firstName)}!<br><br>
-                Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:<br><br>
+                Boa notícia: o produto que você estava aguardando voltou ao estoque:<br><br>
                 <strong>${escapeHtml(productName)}</strong><br><br>
                 Você pode ver aqui:<br>
                 ${productLink}<br><br>
