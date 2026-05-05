@@ -680,7 +680,7 @@ async function previewRestockEmails(req, res) {
       const textBody =
 `Olá, ${firstName}!
 
-Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:
+Boa notícia: o produto que você estava aguardando voltou ao estoque:
 
 ${productName}
 
@@ -695,7 +695,7 @@ Elo Forte`;
       const htmlBody =
 `<p>Olá, ${firstName}!</p>
 
-<p>Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:</p>
+<p>Boa notícia: o produto que você estava aguardando voltou ao estoque:</p>
 
 <p><strong>${productName}</strong></p>
 
