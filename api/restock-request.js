@@ -845,7 +845,6 @@ async function generateRestockReportHtml(req, res) {
             <td>${escapeHtml(item.product_name)}</td>
             <td>${escapeHtml(item.variant_id)}</td>
             <td>${item.waiting_count}</td>
-            <td>${item.unique_emails_count}</td>
             <td>${formatDate(item.last_request_at)}</td>
             <td>${productLink}</td>
           </tr>
@@ -1015,8 +1014,7 @@ async function generateRestockReportHtml(req, res) {
                       <th>#</th>
                       <th>Produto</th>
                       <th>Variação</th>
-                      <th>Pedidos</th>
-                      <th>E-mails únicos</th>
+                      <th>Clientes aguardando</th>
                       <th>Último pedido</th>
                       <th>Link</th>
                     </tr>
