@@ -19,6 +19,10 @@ if (req.method === "GET" && req.query.action === "report") {
   return await generateRestockReport(req, res);
 }
 
+  if (req.method === "GET" && req.query.action === "report-html") {
+  return await generateRestockReportHtml(req, res);
+}
+  
   // Nova função: listar clientes prontos para receber aviso
 if (req.method === "GET" && req.query.action === "ready-to-notify") {
   return await getReadyToNotify(req, res);
@@ -726,5 +730,315 @@ Elo Forte`;
       message: "Erro interno ao gerar prévia dos e-mails.",
       error: error.message,
     });
+  }
+}
+
+// Função de relatório visual dos produtos mais aguardados
+async function generateRestockReportHtml(req, res) {
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).send("Variáveis do Supabase não configuradas na Vercel.");
+    }
+
+    const requestsUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?status=eq.aguardando` +
+      `&select=id,created_at,name,email,product_id,variant_id,product_name,product_url,status` +
+      `&order=created_at.desc`;
+
+    const requestsResponse = await fetch(requestsUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const requestsData = await requestsResponse.json();
+
+    if (!requestsResponse.ok) {
+      return res.status(500).send("Erro ao buscar dados no Supabase.");
+    }
+
+    const grouped = {};
+
+    for (const item of requestsData || []) {
+      const key = `${item.product_id || ""}__${item.variant_id || ""}`;
+
+      if (!grouped[key]) {
+        grouped[key] = {
+          product_id: item.product_id || "",
+          variant_id: item.variant_id || "sem_variacao",
+          product_name: item.product_name || "",
+          product_url: item.product_url || "",
+          waiting_count: 0,
+          emails: [],
+          first_request_at: item.created_at,
+          last_request_at: item.created_at,
+        };
+      }
+
+      grouped[key].waiting_count += 1;
+
+      if (item.email && !grouped[key].emails.includes(item.email)) {
+        grouped[key].emails.push(item.email);
+      }
+
+      const currentDate = new Date(item.created_at);
+      const firstDate = new Date(grouped[key].first_request_at);
+      const lastDate = new Date(grouped[key].last_request_at);
+
+      if (currentDate < firstDate) {
+        grouped[key].first_request_at = item.created_at;
+      }
+
+      if (currentDate > lastDate) {
+        grouped[key].last_request_at = item.created_at;
+      }
+    }
+
+    const items = Object.values(grouped)
+      .map((item) => ({
+        ...item,
+        unique_emails_count: item.emails.length,
+      }))
+      .sort((a, b) => b.waiting_count - a.waiting_count);
+
+    function formatDate(dateString) {
+      if (!dateString) return "-";
+
+      try {
+        return new Date(dateString).toLocaleString("pt-BR", {
+          timeZone: "America/Sao_Paulo",
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      } catch (error) {
+        return dateString;
+      }
+    }
+
+    function escapeHtml(value) {
+      return String(value || "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    const rows = items
+      .map((item, index) => {
+        const productLink = item.product_url
+          ? `<a href="${escapeHtml(item.product_url)}" target="_blank">Ver produto</a>`
+          : "-";
+
+        return `
+          <tr>
+            <td>${index + 1}</td>
+            <td>${escapeHtml(item.product_name)}</td>
+            <td>${escapeHtml(item.variant_id)}</td>
+            <td>${item.waiting_count}</td>
+            <td>${item.unique_emails_count}</td>
+            <td>${formatDate(item.last_request_at)}</td>
+            <td>${productLink}</td>
+          </tr>
+        `;
+      })
+      .join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Relatório - Avise-me quando chegar</title>
+        <style>
+          body {
+            font-family: Arial, sans-serif;
+            background: #fff7fa;
+            color: #444;
+            margin: 0;
+            padding: 24px;
+          }
+
+          .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: #fff;
+            border: 1px solid #f3c2cf;
+            border-radius: 18px;
+            padding: 24px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.05);
+          }
+
+          h1 {
+            margin: 0 0 8px;
+            color: #555;
+            font-size: 26px;
+          }
+
+          .subtitle {
+            margin: 0 0 22px;
+            color: #777;
+            font-size: 14px;
+          }
+
+          .summary {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-bottom: 22px;
+          }
+
+          .card {
+            background: #fff7fa;
+            border: 1px solid #f3c2cf;
+            border-radius: 14px;
+            padding: 14px 18px;
+            min-width: 160px;
+          }
+
+          .card strong {
+            display: block;
+            font-size: 22px;
+            color: #d8899f;
+            margin-bottom: 4px;
+          }
+
+          .card span {
+            font-size: 13px;
+            color: #666;
+          }
+
+          table {
+            width: 100%;
+            border-collapse: collapse;
+            overflow: hidden;
+            border-radius: 14px;
+          }
+
+          th {
+            background: #f4b8c8;
+            color: #444;
+            text-align: left;
+            padding: 12px;
+            font-size: 13px;
+          }
+
+          td {
+            border-bottom: 1px solid #f5d6df;
+            padding: 12px;
+            font-size: 13px;
+            vertical-align: top;
+          }
+
+          tr:hover {
+            background: #fff7fa;
+          }
+
+          a {
+            color: #c45f7c;
+            font-weight: 700;
+            text-decoration: none;
+          }
+
+          a:hover {
+            text-decoration: underline;
+          }
+
+          .empty {
+            background: #fff7fa;
+            border: 1px dashed #f3c2cf;
+            border-radius: 14px;
+            padding: 20px;
+            color: #666;
+            text-align: center;
+          }
+
+          .footer {
+            margin-top: 18px;
+            color: #888;
+            font-size: 12px;
+          }
+
+          @media (max-width: 800px) {
+            body {
+              padding: 12px;
+            }
+
+            .container {
+              padding: 16px;
+            }
+
+            table {
+              display: block;
+              overflow-x: auto;
+              white-space: nowrap;
+            }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <h1>Produtos mais aguardados 💛</h1>
+          <p class="subtitle">
+            Relatório de clientes aguardando reposição de estoque.
+          </p>
+
+          <div class="summary">
+            <div class="card">
+              <strong>${items.length}</strong>
+              <span>produtos/variações</span>
+            </div>
+
+            <div class="card">
+              <strong>${requestsData.length}</strong>
+              <span>cadastros aguardando</span>
+            </div>
+          </div>
+
+          ${
+            items.length === 0
+              ? `<div class="empty">Nenhum produto aguardando reposição no momento.</div>`
+              : `
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Produto</th>
+                      <th>Variação</th>
+                      <th>Pedidos</th>
+                      <th>E-mails únicos</th>
+                      <th>Último pedido</th>
+                      <th>Link</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${rows}
+                  </tbody>
+                </table>
+              `
+          }
+
+          <div class="footer">
+            Atualizado em ${formatDate(new Date().toISOString())}.
+          </div>
+        </div>
+      </body>
+      </html>
+    `;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    return res.status(200).send(html);
+  } catch (error) {
+    return res.status(500).send("Erro interno ao gerar relatório visual.");
   }
 }
