@@ -31,6 +31,10 @@ if (req.method === "GET" && req.query.action === "ready-to-notify") {
   if (req.method === "GET" && req.query.action === "ready-to-notify-html") {
   return await getReadyToNotifyHtml(req, res);
 }
+
+  if (req.method === "GET" && req.query.action === "send-restock-emails") {
+  return await sendRestockEmails(req, res);
+}
   
   // Nova função: prévia dos e-mails de reposição, sem enviar
 if (req.method === "GET" && req.query.action === "preview-restock-emails") {
@@ -1311,5 +1315,130 @@ async function getReadyToNotifyHtml(req, res) {
     return res.status(200).send(html);
   } catch (error) {
     return res.status(500).send("Erro interno ao gerar relatório visual de clientes prontos para aviso.");
+  }
+}
+
+// Função de simulação/envio dos avisos de reposição pelo Zoho
+async function sendRestockEmails(req, res) {
+  try {
+    const mode = req.query.mode || "preview";
+
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !supabaseKey) {
+      return res.status(500).json({
+        ok: false,
+        message: "Variáveis do Supabase não configuradas na Vercel.",
+      });
+    }
+
+    const requestsUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?status=eq.disponivel` +
+      `&select=id,created_at,name,email,product_id,variant_id,product_name,product_url,status,notified_at` +
+      `&order=created_at.asc`;
+
+    const requestsResponse = await fetch(requestsUrl, {
+      method: "GET",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+      },
+    });
+
+    const requestsData = await requestsResponse.json();
+
+    if (!requestsResponse.ok) {
+      return res.status(500).json({
+        ok: false,
+        message: "Erro ao buscar clientes disponíveis para envio.",
+        error: requestsData,
+      });
+    }
+
+    if (!requestsData || requestsData.length === 0) {
+      return res.status(200).json({
+        ok: true,
+        mode,
+        message: "Nenhum cliente com status disponivel para aviso.",
+        total: 0,
+        items: [],
+      });
+    }
+
+    const items = requestsData.map((item) => {
+      const firstName =
+        item.name && String(item.name).trim()
+          ? String(item.name).trim().split(" ")[0]
+          : "Olá";
+
+      const productName = item.product_name || "o produto que você estava aguardando";
+      const productUrl = item.product_url || "https://elofortedigital.com.br/produtos/";
+      const variant = item.variant_id === "sem_variacao" ? "Sem variação" : item.variant_id;
+
+      const zohoPayloadPreview = {
+        email: item.email,
+        first_name: firstName,
+        produto_aguardado: productName,
+        variacao_aguardada: variant,
+        link_do_produto: productUrl,
+        data_pedido_aviso: item.created_at,
+      };
+
+      const emailPreview = {
+        to: item.email,
+        subject: "Seu produto voltou para a loja 💛",
+        text_body:
+`Olá, ${firstName}!
+
+Boa notícia: o produto que você pediu para ser avisada voltou ao estoque:
+
+${productName}
+
+Você pode ver aqui:
+${productUrl}
+
+Como algumas reposições são limitadas, vale garantir o seu enquanto estiver disponível.
+
+Com carinho,
+Elo Forte`,
+      };
+
+      return {
+        id: item.id,
+        status_atual: item.status,
+        name: item.name,
+        email: item.email,
+        product_id: item.product_id,
+        variant_id: item.variant_id,
+        product_name: productName,
+        product_url: productUrl,
+        zoho_payload_preview: zohoPayloadPreview,
+        email_preview: emailPreview,
+      };
+    });
+
+    if (mode === "preview") {
+      return res.status(200).json({
+        ok: true,
+        mode,
+        message: "Prévia dos dados que seriam enviados ao Zoho. Nenhum e-mail foi enviado.",
+        total: items.length,
+        items,
+      });
+    }
+
+    return res.status(400).json({
+      ok: false,
+      message: "Modo ainda não liberado. Use mode=preview por enquanto.",
+      example: "/api/restock-request?action=send-restock-emails&mode=preview",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      ok: false,
+      message: "Erro interno ao preparar envio dos avisos.",
+      error: error.message,
+    });
   }
 }
