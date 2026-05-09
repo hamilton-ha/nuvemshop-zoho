@@ -1359,7 +1359,7 @@ async function sendRestockContactToZoho(payload) {
           "Produto Aguardado": payload.produto_aguardado || "",
           "Variação Aguardada": payload.variacao_aguardada || "",
           "Link do Produto": payload.link_do_produto || "",
-          "Data Pedido Aviso": payload.data_pedido_aviso || "",
+          "Pedido Aviso": payload.data_pedido_aviso || "",
         }),
       }),
     }
