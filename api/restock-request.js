@@ -1513,6 +1513,96 @@ Elo Forte`,
     zoho_result: zohoResult,
   });
 }
+
+    if (mode === "send") {
+  if (!items.length) {
+    return res.status(200).json({
+      ok: true,
+      mode,
+      message: "Nenhum aviso pronto para envio no momento.",
+      total: 0,
+    });
+  }
+
+  const enviados = [];
+  const erros = [];
+
+  for (const item of items) {
+    try {
+      const zohoResult = await sendRestockContactToZoho(item.zoho_payload_preview);
+
+      if (zohoResult.status === "success") {
+        enviados.push({
+          id: item.id,
+          email: item.email,
+          product_name: item.product_name,
+          product_url: item.product_url,
+          zoho_result: zohoResult,
+        });
+      } else {
+        erros.push({
+          id: item.id,
+          email: item.email,
+          product_name: item.product_name,
+          zoho_result: zohoResult,
+        });
+      }
+    } catch (error) {
+      erros.push({
+        id: item.id,
+        email: item.email,
+        product_name: item.product_name,
+        error: error.message,
+      });
+    }
+  }
+
+  const idsEnviados = enviados.map((item) => item.id);
+
+  if (idsEnviados.length > 0) {
+    const updateUrl =
+      `${supabaseUrl}/rest/v1/restock_requests` +
+      `?id=in.(${idsEnviados.join(",")})`;
+
+    const updateResponse = await fetch(updateUrl, {
+      method: "PATCH",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify({
+        status: "avisado",
+        notified_at: new Date().toISOString(),
+      }),
+    });
+
+    const updateData = await updateResponse.json();
+
+    if (!updateResponse.ok) {
+      return res.status(500).json({
+        ok: false,
+        mode,
+        message: "Os contatos foram enviados ao Zoho, mas houve erro ao atualizar o Supabase.",
+        enviados,
+        erros,
+        supabase_error: updateData,
+      });
+    }
+  }
+
+  return res.status(200).json({
+    ok: true,
+    mode,
+    message: "Envio real concluído. Contatos enviados ao Zoho e Supabase atualizado.",
+    total_preparado: items.length,
+    enviados: enviados.length,
+    erros: erros.length,
+    detalhes_enviados: enviados,
+    detalhes_erros: erros,
+  });
+}
     
     return res.status(400).json({
       ok: false,
