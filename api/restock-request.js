@@ -1322,6 +1322,54 @@ async function getReadyToNotifyHtml(req, res) {
   }
 }
 
+async function sendRestockContactToZoho(payload) {
+  const zohoTokenResponse = await fetch(
+    "https://project-2jpn7.vercel.app/api/zoho-token"
+  );
+
+  const zohoTokenData = await zohoTokenResponse.json();
+  const accessToken = zohoTokenData.access_token;
+
+  if (!accessToken) {
+    throw new Error("Não foi possível obter access_token do Zoho.");
+  }
+
+  const listKey =
+    process.env.ZOHO_RESTOCK_LIST_KEY ||
+    process.env.ZOHO_LIST_KEY;
+
+  if (!listKey) {
+    throw new Error("ZOHO_RESTOCK_LIST_KEY ou ZOHO_LIST_KEY não configurada na Vercel.");
+  }
+
+  const zohoResponse = await fetch(
+    "https://campaigns.zoho.com/api/v1.1/json/listsubscribe",
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Zoho-oauthtoken ${accessToken}`,
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+      body: new URLSearchParams({
+        resfmt: "JSON",
+        listkey: listKey,
+        contactinfo: JSON.stringify({
+          "Contact Email": payload.email,
+          "First Name": payload.first_name || "",
+          "Produto Aguardado": payload.produto_aguardado || "",
+          "Variação Aguardada": payload.variacao_aguardada || "",
+          "Link do Produto": payload.link_do_produto || "",
+          "Data Pedido Aviso": payload.data_pedido_aviso || "",
+        }),
+      }),
+    }
+  );
+
+  const resultado = await zohoResponse.json();
+
+  return resultado;
+}
+
 // Função de simulação/envio dos avisos de reposição pelo Zoho
 async function sendRestockEmails(req, res) {
   try {
@@ -1433,6 +1481,39 @@ Elo Forte`,
       });
     }
 
+    if (mode === "test") {
+  if (!items.length) {
+    return res.status(200).json({
+      ok: true,
+      mode,
+      message: "Nenhum aviso pronto para teste no momento.",
+      total: 0,
+    });
+  }
+
+  const testEmail = process.env.RESTOCK_TEST_EMAIL || "soaresjrhamilton@gmail.com";
+
+  const firstItem = items[0];
+
+  const testPayload = {
+    ...firstItem.zoho_payload_preview,
+    email: testEmail,
+  };
+
+  const zohoResult = await sendRestockContactToZoho(testPayload);
+
+  return res.status(200).json({
+    ok: true,
+    mode,
+    message: "Teste enviado ao Zoho. Nenhum status foi alterado no Supabase.",
+    original_email: firstItem.email,
+    test_email: testEmail,
+    product_name: firstItem.product_name,
+    product_url: firstItem.product_url,
+    zoho_result: zohoResult,
+  });
+}
+    
     return res.status(400).json({
       ok: false,
       message: "Modo ainda não liberado. Use mode=preview por enquanto.",
