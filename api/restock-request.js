@@ -1515,6 +1515,16 @@ Elo Forte`,
 }
 
     if (mode === "send") {
+      const secret = req.query.secret;
+
+if (!process.env.RESTOCK_SEND_SECRET || secret !== process.env.RESTOCK_SEND_SECRET) {
+  return res.status(401).json({
+    ok: false,
+    mode,
+    message: "Envio real não autorizado.",
+  });
+}
+      
   if (!items.length) {
     return res.status(200).json({
       ok: true,
