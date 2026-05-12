@@ -1374,7 +1374,18 @@ async function sendRestockContactToZoho(payload) {
 async function sendRestockEmails(req, res) {
   try {
     const mode = req.query.mode || "preview";
+if (mode === "send") {
+  const secret = req.query.secret;
 
+  if (!process.env.RESTOCK_SEND_SECRET || secret !== process.env.RESTOCK_SEND_SECRET) {
+    return res.status(401).json({
+      ok: false,
+      mode,
+      message: "Envio real não autorizado.",
+    });
+  }
+}
+    
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
