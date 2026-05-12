@@ -1375,7 +1375,7 @@ async function sendRestockEmails(req, res) {
   try {
     const mode = req.query.mode || "preview";
 if (mode === "send") {
-  const secret = req.query.secret;
+  const secret = req.headers["x-restock-secret"] || req.query.secret;
 
   if (!process.env.RESTOCK_SEND_SECRET || secret !== process.env.RESTOCK_SEND_SECRET) {
     return res.status(401).json({
@@ -1526,8 +1526,8 @@ Elo Forte`,
 }
 
     if (mode === "send") {
-      const secret = req.query.secret;
-
+      const secret = req.headers["x-restock-secret"] || req.query.secret;
+      
 if (!process.env.RESTOCK_SEND_SECRET || secret !== process.env.RESTOCK_SEND_SECRET) {
   return res.status(401).json({
     ok: false,
