@@ -455,10 +455,21 @@ module.exports = async function handler(req, res) {
       });
     }
 
-    const resultadoZoho = await processarCarrinhoRecuperado({
-      email,
-      name,
-    });
+    let resultadoZoho = null;
+
+    try {
+      resultadoZoho = await processarCarrinhoRecuperado({
+        email,
+        name,
+      });
+    } catch (zohoErro) {
+      console.log("ZOHO_PROCESS_ERROR:", zohoErro);
+
+      resultadoZoho = {
+        ok: false,
+        erro: zohoErro.message,
+      };
+    }
 
     let resultadoGA4 = null;
 
