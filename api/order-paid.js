@@ -324,6 +324,33 @@ async function processarGA4ServerSide(order, webhookPayload) {
     };
   }
 
+  const normalizePaymentText = (value) =>
+    String(value || "")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .trim();
+
+  const checkedPaymentFields = {
+    payment_details_method: order.payment_details?.method || null,
+    gateway_name: order.gateway_name || null,
+    gateway: order.gateway || null,
+  };
+
+  const isPix = Object.values(checkedPaymentFields).some((fieldValue) =>
+    normalizePaymentText(fieldValue).includes("pix")
+  );
+
+  if (!isPix) {
+    return {
+      ok: true,
+      skipped: true,
+      reason: "Order not eligible for GA4 server-side (non-Pix)",
+      payment_type: order.payment_details?.method || order.gateway_name || order.gateway || null,
+      checked_payment_fields: checkedPaymentFields,
+    };
+  }
+
   const transactionId = String(order.number || order.id);
 
   const insertResult = await insertSupabaseControl({
