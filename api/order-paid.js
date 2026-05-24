@@ -168,10 +168,11 @@ function removeUndefined(object) {
 }
 
 function buildGA4PurchasePayload(order, transactionId) {
+  // Prioriza total final do pedido para bater com o valor exibido na Nuvemshop
   const value = toNumber(
-    order.total_paid_by_customer ||
-      order.total_paid_by_customer_including_fees ||
-      order.total
+    order.total ||
+      order.total_paid_by_customer ||
+      order.total_paid_by_customer_including_fees
   );
 
   const shipping = toNumber(order.shipping_cost_customer || 0);
@@ -333,15 +334,32 @@ async function processarGA4ServerSide(order, webhookPayload) {
 
   const checkedPaymentFields = {
     payment_details_method: order.payment_details?.method || null,
+    payment_details_name: order.payment_details?.name || null,
     gateway_name: order.gateway_name || null,
     gateway: order.gateway || null,
   };
 
-  const isPix = Object.values(checkedPaymentFields).some((fieldValue) =>
-    normalizePaymentText(fieldValue).includes("pix")
-  );
+  const paymentCandidates = Object.values(checkedPaymentFields)
+    .map((value) => normalizePaymentText(value))
+    .filter(Boolean);
+
+  // Match explícito de "pix" como termo (evita condição frouxa com includes)
+  const pixRegex = /(^|[^a-z0-9])pix([^a-z0-9]|$)/;
+  const isPix = paymentCandidates.some((value) => pixRegex.test(value));
 
   if (!isPix) {
+    // Log temporário seguro para validação de elegibilidade
+    console.log("GA4_SKIPPED_NON_PIX", {
+      order_id: order.id || null,
+      order_number: order.number || null,
+      payment_status: order.payment_status || null,
+      payment_fields: checkedPaymentFields,
+      total: order.total || null,
+      subtotal: order.subtotal || null,
+      shipping: order.shipping_cost_customer || null,
+      discount: order.discount || null,
+    });
+
     return {
       ok: true,
       skipped: true,
@@ -350,6 +368,14 @@ async function processarGA4ServerSide(order, webhookPayload) {
       checked_payment_fields: checkedPaymentFields,
     };
   }
+
+  // Log temporário seguro para validação de Pix elegível
+  console.log("GA4_ELIGIBLE_PIX", {
+    order_id: order.id || null,
+    order_number: order.number || null,
+    payment_fields: checkedPaymentFields,
+    total: order.total || null,
+  });
 
   const transactionId = String(order.number || order.id);
 
