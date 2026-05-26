@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   // Libera chamadas vindas do site
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, GET, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, x-restock-secret");
 
   // Responde a requisições de verificação do navegador
   if (req.method === "OPTIONS") {
@@ -190,7 +190,6 @@ async function checkRestock(req, res) {
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
     const nuvemshopStoreId = process.env.NUVEMSHOP_STORE_ID;
     const nuvemshopAccessToken = process.env.NUVEMSHOP_ACCESS_TOKEN;
 
@@ -209,7 +208,6 @@ async function checkRestock(req, res) {
       });
     }
 
-    // 1. Busca no Supabase todos os pedidos ainda aguardando aviso
     const requestsUrl =
       `${supabaseUrl}/rest/v1/restock_requests` +
       `?status=eq.aguardando` +
@@ -227,8 +225,6 @@ async function checkRestock(req, res) {
     const requestsData = await requestsResponse.json();
 
     if (!requestsResponse.ok) {
-      console.error("Erro ao buscar registros aguardando:", requestsData);
-
       return res.status(500).json({
         ok: false,
         message: "Erro ao buscar registros aguardando no Supabase.",
@@ -236,196 +232,223 @@ async function checkRestock(req, res) {
       });
     }
 
-    if (!requestsData || requestsData.length === 0) {
+    if (!Array.isArray(requestsData) || requestsData.length === 0) {
       return res.status(200).json({
         ok: true,
         message: "Nenhum produto aguardando reposição.",
-        total: 0,
+        checked: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
         items: [],
       });
     }
 
-    const results = [];
+    const normalize = (value) => String(value || "").trim().toLowerCase();
 
-    // 2. Consulta cada produto na Nuvemshop
+    const getVariantValuesText = (variant) => {
+      if (!Array.isArray(variant?.values)) return "";
+
+      return variant.values
+        .map((value) => {
+          if (typeof value === "string") return value;
+          if (value && typeof value === "object") {
+            return value.pt || value.name || value.value || "";
+          }
+          return "";
+        })
+        .join(" ")
+        .trim()
+        .toLowerCase();
+    };
+
+    const items = [];
+
     for (const request of requestsData) {
+      const requestId = request.id;
       const productId = String(request.product_id || "").trim();
-      const variantId = request.variant_id ? String(request.variant_id).trim() : "";
+      const variantIdRaw = String(request.variant_id || "").trim();
+      const variantIdNormalized = normalize(variantIdRaw);
+
+      let stock = 0;
+      let available = false;
+      let statusCheck = "sem_estoque";
+      let statusUpdated = false;
+      let updateError = null;
 
       if (!productId) {
-        results.push({
-          id: request.id,
-          email: request.email,
-          product_name: request.product_name,
+        items.push({
+          id: requestId,
+          product_id: request.product_id || null,
+          variant_id: request.variant_id || null,
+          stock,
+          available,
           status_check: "product_id_ausente",
-          available: false,
+          status_updated: false,
         });
-
         continue;
       }
 
-      const productResponse = await fetch(
-        `https://api.nuvemshop.com.br/v1/${nuvemshopStoreId}/products/${productId}`,
-        {
-          method: "GET",
-          headers: {
-            Authentication: `bearer ${nuvemshopAccessToken}`,
-            "User-Agent": "Elo Forte Restock Automation",
-          },
+      let product;
+      try {
+        const productResponse = await fetch(
+          `https://api.nuvemshop.com.br/v1/${nuvemshopStoreId}/products/${productId}`,
+          {
+            method: "GET",
+            headers: {
+              Authentication: `bearer ${nuvemshopAccessToken}`,
+              "User-Agent": "Elo Forte Restock Automation",
+            },
+          }
+        );
+
+        if (!productResponse.ok) {
+          items.push({
+            id: requestId,
+            product_id: request.product_id,
+            variant_id: request.variant_id || null,
+            stock,
+            available,
+            status_check: "erro_ao_consultar_nuvemshop",
+            status_updated: false,
+            http_status: productResponse.status,
+          });
+          continue;
         }
-      );
 
-      if (!productResponse.ok) {
-        results.push({
-          id: request.id,
-          email: request.email,
+        product = await productResponse.json();
+      } catch (error) {
+        items.push({
+          id: requestId,
           product_id: request.product_id,
-          variant_id: request.variant_id,
-          product_name: request.product_name,
+          variant_id: request.variant_id || null,
+          stock,
+          available,
           status_check: "erro_ao_consultar_nuvemshop",
-          http_status: productResponse.status,
-          available: false,
+          status_updated: false,
+          error: error.message,
         });
-
         continue;
       }
 
-      const product = await productResponse.json();
+      const variants = Array.isArray(product?.variants) ? product.variants : [];
 
-      const variants = Array.isArray(product.variants) ? product.variants : [];
+      if (variants.length === 0) {
+        stock = Number(product?.stock || 0);
+        available = stock > 0;
+        statusCheck = available ? "disponivel_produto_simples" : "sem_estoque_produto_simples";
+      } else {
+        let matchedVariant = null;
 
-      let variant = null;
+        if (variantIdNormalized) {
+          matchedVariant = variants.find((variant) => {
+            const currentVariantId = normalize(variant?.id);
+            const currentVariantSku = normalize(variant?.sku);
+            const currentVariantName = normalize(variant?.name);
+            const currentVariantValues = getVariantValuesText(variant);
 
-     if (variantId) {
-  variant = variants.find((item) => {
-    const receivedVariantId = String(variantId || "").trim().toLowerCase();
+            return (
+              currentVariantId === variantIdNormalized ||
+              currentVariantSku === variantIdNormalized ||
+              currentVariantName === variantIdNormalized ||
+              currentVariantValues === variantIdNormalized ||
+              currentVariantValues.includes(variantIdNormalized)
+            );
+          });
+        }
 
-    const itemId = String(item.id || "").trim().toLowerCase();
-    const itemSku = String(item.sku || "").trim().toLowerCase();
-    const itemName = String(item.name || "").trim().toLowerCase();
+        if (!matchedVariant && variants.length === 1) {
+          matchedVariant = variants[0];
+        }
 
-    const itemValues = Array.isArray(item.values)
-      ? item.values
-          .map((value) => {
-            if (typeof value === "string") return value;
+        if (!matchedVariant) {
+          items.push({
+            id: requestId,
+            product_id: request.product_id,
+            variant_id: request.variant_id || null,
+            stock: 0,
+            available: false,
+            status_check: "variante_nao_encontrada",
+            status_updated: false,
+            variantes_disponiveis: variants.map((variant) => ({
+              id: variant.id,
+              sku: variant.sku,
+              name: variant.name,
+              stock: variant.stock,
+            })),
+          });
+          continue;
+        }
 
-            if (value && typeof value === "object") {
-              return value.pt || value.name || value.value || "";
+        stock = Number(matchedVariant?.stock || 0);
+        available = stock > 0;
+        statusCheck = available ? "disponivel" : "sem_estoque";
+      }
+
+      if (available) {
+        try {
+          const updateResponse = await fetch(
+            `${supabaseUrl}/rest/v1/restock_requests?id=eq.${encodeURIComponent(requestId)}`,
+            {
+              method: "PATCH",
+              headers: {
+                "Content-Type": "application/json",
+                apikey: supabaseKey,
+                Authorization: `Bearer ${supabaseKey}`,
+                Prefer: "return=representation",
+              },
+              body: JSON.stringify({
+                status: "disponivel",
+              }),
             }
+          );
 
-            return "";
-          })
-          .join(" ")
-          .trim()
-          .toLowerCase()
-      : "";
+          const updateData = await updateResponse.json();
 
-    return (
-      itemId === receivedVariantId ||
-      itemSku === receivedVariantId ||
-      itemName === receivedVariantId ||
-      itemValues === receivedVariantId ||
-      itemValues.includes(receivedVariantId)
-    );
-  });
-}
+          if (updateResponse.ok) {
+            statusUpdated = true;
+          } else {
+            statusUpdated = false;
+            updateError = updateData;
+            statusCheck = "erro_ao_atualizar_supabase";
+          }
+        } catch (error) {
+          statusUpdated = false;
+          updateError = error.message;
+          statusCheck = "erro_ao_atualizar_supabase";
+        }
+      }
 
-// Se não encontrar pelo ID/SKU, mas o produto tiver apenas uma variante,
-// usa automaticamente a única variante existente
-if (!variant && variants.length === 1) {
-  variant = variants[0];
-}
-
-// Se não tiver variant_id e houver variações, usa a primeira
-if (!variant && variants.length > 0 && !variantId) {
-  variant = variants[0];
-}
-      if (!variant) {
-  results.push({
-    id: request.id,
-    email: request.email,
-    product_id: request.product_id,
-    variant_id_recebido: request.variant_id,
-    product_name: request.product_name,
-    status_check: "variante_nao_encontrada",
-    available: false,
-    variantes_disponiveis: variants.map((item) => ({
-      id: item.id,
-      name: item.name,
-      stock: item.stock,
-      sku: item.sku,
-    })),
-  });
-
-  continue;
-}
-      const stock = Number(variant.stock || 0);
-const available = stock > 0;
-
-let statusUpdated = false;
-let updateError = null;
-
-// Se voltou ao estoque, atualiza o status no Supabase
-if (available) {
-  const updateResponse = await fetch(
-    `${supabaseUrl}/rest/v1/restock_requests?id=eq.${encodeURIComponent(request.id)}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: supabaseKey,
-        Authorization: `Bearer ${supabaseKey}`,
-        Prefer: "return=representation",
-      },
-      body: JSON.stringify({
-        status: "disponivel",
-      }),
+      items.push({
+        id: requestId,
+        product_id: request.product_id,
+        variant_id: request.variant_id || null,
+        stock,
+        available,
+        status_check: statusCheck,
+        status_updated: statusUpdated,
+        ...(updateError ? { update_error: updateError } : {}),
+      });
     }
-  );
 
-  const updateData = await updateResponse.json();
-
-  if (!updateResponse.ok) {
-    statusUpdated = false;
-    updateError = updateData;
-    console.error("Erro ao atualizar status para disponivel:", updateData);
-  } else {
-    statusUpdated = true;
-  }
-}
-
-results.push({
-  id: request.id,
-  name: request.name,
-  email: request.email,
-  product_id: request.product_id,
-  variant_id: request.variant_id,
-  product_name: request.product_name,
-  product_url: request.product_url,
-  stock,
-  available,
-  status_check: available ? "disponivel" : "sem_estoque",
-  status_updated: statusUpdated,
-  update_error: updateError,
-});
-    }
+    const checked = items.length;
+    const updated = items.filter((item) => item.status_updated === true).length;
+    const skipped = items.filter((item) => item.available === false).length;
+    const errors = items.filter(
+      (item) =>
+        item.status_check?.startsWith("erro_") || item.status_check === "product_id_ausente"
+    ).length;
 
     return res.status(200).json({
       ok: true,
       message: "Verificação de estoque concluída.",
-      total: results.length,
-      disponiveis: results.filter((item) => item.available === true).length,
-      sem_estoque: results.filter((item) => item.status_check === "sem_estoque").length,
-      com_erro: results.filter(
-        (item) =>
-          item.status_check !== "sem_estoque" &&
-          item.status_check !== "disponivel"
-      ).length,
-      items: results,
+      checked,
+      updated,
+      skipped,
+      errors,
+      items,
     });
   } catch (error) {
-    console.error("Erro geral ao verificar estoque:", error);
-
     return res.status(500).json({
       ok: false,
       message: "Erro interno ao verificar reposição.",
@@ -433,6 +456,7 @@ results.push({
     });
   }
 }
+
 
 // Função de relatório dos produtos mais aguardados
 async function generateRestockReport(req, res) {
@@ -588,7 +612,10 @@ async function getReadyToNotify(req, res) {
       return res.status(200).json({
         ok: true,
         message: "Nenhum cliente pronto para receber aviso no momento.",
-        total: 0,
+        checked: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
         items: [],
       });
     }
@@ -666,7 +693,10 @@ async function previewRestockEmails(req, res) {
       return res.status(200).json({
         ok: true,
         message: "Nenhum cliente com produto disponível para pré-visualizar e-mail.",
-        total: 0,
+        checked: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
         items: [],
       });
     }
@@ -1430,7 +1460,10 @@ if (mode === "send") {
         ok: true,
         mode,
         message: "Nenhum cliente com status disponivel para aviso.",
-        total: 0,
+        checked: 0,
+        updated: 0,
+        skipped: 0,
+        errors: 0,
         items: [],
       });
     }
