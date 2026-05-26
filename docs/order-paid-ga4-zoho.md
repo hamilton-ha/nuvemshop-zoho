@@ -220,3 +220,65 @@ Uso recomendado desses casos:
 - O endpoint processa Zoho para pedidos com e-mail válido, independentemente do meio de pagamento.
 - A restrição a Pix vale apenas para o envio server-side ao GA4.
 - A tabela `ga4_purchase_events` é usada no controle dos envios server-side Pix (idempotência e rastreabilidade).
+
+## 13) Regra recomendada no GTM para eliminar duplicidade de Pix
+
+Objetivo operacional (sem alterar backend):
+
+- **Pix**: enviar `purchase` **somente** via webhook server-side (`api/order-paid.js`).
+- **Cartão** (e demais não-Pix): manter `purchase` no client-side/GTM.
+
+### Regra de disparo da tag `purchase` (client-side)
+
+No Google Tag Manager, a tag de `purchase` deve disparar apenas quando o método de pagamento **não** for Pix.
+
+Condição recomendada (normalizada, case-insensitive):
+
+- bloquear quando qualquer campo de pagamento contiver `pix`, por exemplo:
+  - `payment_method`
+  - `payment_type`
+  - `gateway`
+
+Em termos lógicos:
+
+- **Dispara purchase client-side** se `payment_text` **NÃO** contém `pix`.
+- **Não dispara purchase client-side** se `payment_text` contém `pix`.
+
+### Como montar `payment_text` no GTM
+
+Criar uma variável (ex.: `{{payment_text_normalized}}`) concatenando candidatos do `dataLayer` e normalizando:
+
+1. `payment_method`
+2. `payment_type`
+3. `gateway`
+
+Depois aplicar:
+
+- `toLowerCase()`
+- remoção de acentos
+- trim
+
+E testar regex de Pix equivalente a termo isolado (evita falso positivo):
+
+- `(^|[^a-z0-9])pix([^a-z0-9]|$)`
+
+### Se o `dataLayer` não trouxer método de pagamento
+
+Como este repositório não contém o código client-side da loja, a identificação precisa ser feita no tema/GTM da Nuvemshop. Procedimento sugerido:
+
+1. Abrir preview do GTM em uma compra real de teste (Pix e cartão).
+2. Inspecionar o evento `purchase` no painel do GTM e listar todas as chaves disponíveis no `dataLayer`.
+3. Procurar campos equivalentes de pagamento (ex.: `payment_method`, `payment_type`, `gateway`, `payment_gateway`, `transaction.payment_method`, etc.).
+4. Se não houver campo explícito, mapear variável da Nuvemshop/checkout que exponha o meio de pagamento no momento do `purchase` e empurrar para `dataLayer` antes da tag GA4.
+
+### Critério de aceite da correção
+
+Após ajustar GTM:
+
+1. Pedido Pix deve gerar:
+   - 1 envio em `ga4_purchase_events` com `status = sent` (server-side)
+   - 1 único `purchase` no GA4 por `transaction_id`
+2. Pedido cartão deve gerar:
+   - `purchase` apenas no client-side/GTM
+   - nenhum envio server-side (continua `skipped` no backend)
+
