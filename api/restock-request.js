@@ -1,3 +1,11 @@
+function normalizeRestockVariantId(variantId) {
+  const normalized = variantId && String(variantId).trim()
+    ? String(variantId).trim()
+    : "sem_variacao";
+
+  return normalized;
+}
+
 export default async function handler(req, res) {
   // Libera chamadas vindas do site
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -96,15 +104,20 @@ if (req.method === "GET" && req.query.action === "preview-restock-emails") {
 
     const normalizedEmail = String(email).trim().toLowerCase();
     const normalizedProductId = String(product_id);
-    const normalizedVariantId = variant_id ? String(variant_id) : "";
+    const normalizedVariantId = normalizeRestockVariantId(variant_id);
 
-    // 1. Verifica se já existe inscrição aguardando para o mesmo e-mail + produto + variação
+    // 1. Verifica se já existe inscrição ativa para o mesmo e-mail + produto + variação
+    const activeDuplicateStatuses = "aguardando,disponivel,enviado_para_zoho,processado_zoho";
+    const variantDuplicateFilter = normalizedVariantId === "sem_variacao"
+      ? `&or=(variant_id.eq.${encodeURIComponent(normalizedVariantId)},variant_id.is.null,variant_id.eq.)`
+      : `&variant_id=eq.${encodeURIComponent(normalizedVariantId)}`;
+
     const duplicateUrl =
   `${supabaseUrl}/rest/v1/restock_requests` +
   `?email=eq.${encodeURIComponent(normalizedEmail)}` +
   `&product_id=eq.${encodeURIComponent(normalizedProductId)}` +
-  `&variant_id=eq.${encodeURIComponent(normalizedVariantId)}` +
-  `&status=in.(aguardando,disponivel)` +
+  variantDuplicateFilter +
+  `&status=in.(${activeDuplicateStatuses})` +
   `&select=id,email,product_id,variant_id,status`;
 
     const duplicateResponse = await fetch(duplicateUrl, {
@@ -149,7 +162,7 @@ if (req.method === "GET" && req.query.action === "preview-restock-emails") {
         name: name || null,
         email: normalizedEmail,
         product_id: normalizedProductId,
-        variant_id: normalizedVariantId || null,
+        variant_id: normalizedVariantId,
         product_name: String(product_name),
         product_url: product_url || null,
         status: "aguardando",
@@ -1476,7 +1489,8 @@ if (mode === "send") {
 
       const productName = item.product_name || "o produto que você estava aguardando";
       const productUrl = item.product_url || "https://elofortedigital.com.br/produtos/";
-      const variant = item.variant_id === "sem_variacao" ? "Sem variação" : item.variant_id;
+      const normalizedVariantId = normalizeRestockVariantId(item.variant_id);
+      const variant = normalizedVariantId === "sem_variacao" ? "Sem variação" : normalizedVariantId;
 
       const zohoPayloadPreview = {
         email: item.email,
@@ -1632,8 +1646,7 @@ if (!process.env.RESTOCK_SEND_SECRET || secret !== process.env.RESTOCK_SEND_SECR
         Prefer: "return=representation",
       },
       body: JSON.stringify({
-        status: "avisado",
-        notified_at: new Date().toISOString(),
+        status: "enviado_para_zoho",
       }),
     });
 
